@@ -21,7 +21,7 @@
 
 Each day covers one or more domains. For each domain:
 
-1. Read the notes in `notes/domainX/` at your own pace
+1. Read the notes in `notes/en/domainX/` at your own pace
 2. Come back to Claude Code and say **"quiz me"** — Claude will run an exam-style quiz on what you just read
 3. Check off items as you complete them
 4. Move to the next domain
@@ -36,35 +36,35 @@ The notes and quizzes together cover all 5 exam domains with the same question s
 - [ ] Read the CCA-F study guide: https://tutorialsdojo.com/cca-f-claude-certified-architect-foundations-study-guide/
 - [ ] Start Claude Code in Action on Anthropic Academy: https://anthropic.skilljar.com/claude-code-in-action
 - [ ] Study Domain 3 – Claude Code Configuration & Workflows
-  - [ ] `notes/domain3/01_claude_md_hierarchy.md`
-  - [ ] `notes/domain3/02_custom_slash_commands.md`
-  - [ ] `notes/domain3/03_cicd_integration.md`
-  - [ ] `notes/domain3/04_hooks.md`
-  - [ ] `notes/domain3/05_permissions_model.md`
+  - [ ] `notes/en/domain3/01_claude_md_hierarchy.md`
+  - [ ] `notes/en/domain3/02_custom_slash_commands.md`
+  - [ ] `notes/en/domain3/03_cicd_integration.md`
+  - [ ] `notes/en/domain3/04_hooks.md`
+  - [ ] `notes/en/domain3/05_permissions_model.md`
 - [ ] Quiz session with Claude on Domain 3 topics
 
 ## Day 2: Architecture — Domains 1 & 5
 
 - [ ] Study Domain 1 – Agentic Architecture & Orchestration (27% — biggest domain)
-  - [ ] `notes/domain1/01_multi_agent_design_patterns.md`
-  - [ ] `notes/domain1/02_task_decomposition.md`
-  - [ ] `notes/domain1/03_agentic_loops.md`
-  - [ ] `notes/domain1/04_subagent_coordination.md`
-  - [ ] `notes/domain1/05_reliability_patterns.md`
+  - [ ] `notes/en/domain1/01_multi_agent_design_patterns.md`
+  - [ ] `notes/en/domain1/02_task_decomposition.md`
+  - [ ] `notes/en/domain1/03_agentic_loops.md`
+  - [ ] `notes/en/domain1/04_subagent_coordination.md`
+  - [ ] `notes/en/domain1/05_reliability_patterns.md`
 - [ ] Study Domain 5 – Context Management & Reliability
-  - [ ] `notes/domain5/01_context_window_management.md`
-  - [ ] `notes/domain5/02_long_running_task_reliability.md`
+  - [ ] `notes/en/domain5/01_context_window_management.md`
+  - [ ] `notes/en/domain5/02_long_running_task_reliability.md`
 - [ ] Quiz session with Claude on Domain 1 & 5 topics
 
 ## Day 3: MCP & Prompting — Domains 2 & 4
 
 - [ ] Study Domain 2 – Tool Design & MCP Integration
-  - [ ] `notes/domain2/01_mcp_fundamentals.md`
-  - [ ] `notes/domain2/02_stdio_vs_sse.md`
-  - [ ] `notes/domain2/03_tool_schema_design.md`
+  - [ ] `notes/en/domain2/01_mcp_fundamentals.md`
+  - [ ] `notes/en/domain2/02_stdio_vs_sse.md`
+  - [ ] `notes/en/domain2/03_tool_schema_design.md`
 - [ ] Study Domain 4 – Prompt Engineering & Structured Output
-  - [ ] `notes/domain4/01_prompt_engineering.md`
-  - [ ] `notes/domain4/02_structured_output_patterns.md`
+  - [ ] `notes/en/domain4/01_prompt_engineering.md`
+  - [ ] `notes/en/domain4/02_structured_output_patterns.md`
 - [ ] Quiz session with Claude on Domain 2 & 4 topics
 
 ## Day 4: Practice Exams

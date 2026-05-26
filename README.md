@@ -20,6 +20,17 @@ This repo gives you structured notes for all 5 exam domains and an AI coach that
 
 ---
 
+## Language Support
+
+This repo supports **English** and **Spanish (Español)**. When you open Claude Code, it will ask which language you prefer before starting. All notes, quizzes, and coaching are fully available in both languages.
+
+| | English | Español |
+|---|---|---|
+| Notes | `notes/en/` | `notes/es/` |
+| Study plan | `plan.md` | `plan.es.md` |
+
+---
+
 ## Prerequisites
 
 - [Claude Code](https://claude.ai/code) installed and authenticated

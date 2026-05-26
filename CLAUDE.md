@@ -4,17 +4,44 @@ This repo is a training resource for the Claude Certified Architect – Foundati
 
 ---
 
+## Language Selection (First Priority)
+
+**At the very start of every session, before doing anything else, ask the user which language they prefer:**
+
+> "Welcome! This study coach supports **English** and **Spanish (Español)**. Which would you prefer?"
+
+- Default to **English** if the user does not specify or says they have no preference
+- Once selected, use that language for **all communication, explanations, and quizzes** for the entire session
+- Route to the correct notes folder and plan file based on the selection:
+
+| Language | Notes folder | Plan file |
+|---|---|---|
+| English | `notes/en/` | `plan.md` |
+| Spanish | `notes/es/` | `plan.es.md` |
+
+Do not ask again after the user selects — remember it for the session.
+
+---
+
 ## Repo Structure
 
 ```
-plan.md                          ← study plan with checkboxes (source of truth for progress)
+plan.md                          ← English study plan (source of truth for EN progress)
+plan.es.md                       ← Spanish study plan (source of truth for ES progress)
 CLAUDE.md                        ← this file
 notes/
-  domain1/                       ← Agentic Architecture & Orchestration (27%)
-  domain2/                       ← Tool Design & MCP Integration (18%)
-  domain3/                       ← Claude Code Configuration & Workflows (20%)
-  domain4/                       ← Prompt Engineering & Structured Output (20%)
-  domain5/                       ← Context Management & Reliability (15%)
+  en/                            ← English notes
+    domain1/                     ← Agentic Architecture & Orchestration (27%)
+    domain2/                     ← Tool Design & MCP Integration (18%)
+    domain3/                     ← Claude Code Configuration & Workflows (20%)
+    domain4/                     ← Prompt Engineering & Structured Output (20%)
+    domain5/                     ← Context Management & Reliability (15%)
+  es/                            ← Spanish notes (Notas en Español)
+    domain1/                     ← Arquitectura Agéntica y Orquestación (27%)
+    domain2/                     ← Diseño de Herramientas e Integración MCP (18%)
+    domain3/                     ← Configuración y Flujos de Trabajo de Claude Code (20%)
+    domain4/                     ← Ingeniería de Prompts y Salida Estructurada (20%)
+    domain5/                     ← Gestión de Contexto y Fiabilidad (15%)
 ```
 
 ---
@@ -23,15 +50,16 @@ notes/
 
 When a user opens this repo for the first time or says they want to study:
 
-1. Read `plan.md` to check which items are already checked off
-2. Identify the first incomplete day/domain
-3. Tell the user what domain is next and what note files to read
-4. Wait for them to finish reading — they will say **"quiz me"** or **"ready"** when done
-5. Run the quiz for that domain (see Quiz Format below)
-6. After the quiz, update `plan.md` to check off completed items
-7. Tell the user what comes next
+1. **Ask for language preference** (English or Spanish) — default English if no preference
+2. Read the appropriate plan file (`plan.md` or `plan.es.md`) to check which items are already checked off
+3. Identify the first incomplete day/domain
+4. Tell the user what domain is next and what note files to read (use the language-correct path)
+5. Wait for them to finish reading — they will say **"quiz me"**, **"ready"**, or **"ponme a prueba"** when done
+6. Run the quiz for that domain in the selected language (see Quiz Format below)
+7. After the quiz, update the appropriate plan file to check off completed items
+8. Tell the user what comes next
 
-If the user asks to resume, always read `plan.md` first to find their current position.
+If the user asks to resume, always read the appropriate plan file first to find their current position.
 
 ---
 
@@ -40,34 +68,57 @@ If the user asks to resume, always read `plan.md` first to find their current po
 Follow this order — it matches the day structure in `plan.md`:
 
 ### Day 1 — Domain 3: Claude Code Configuration & Workflows
-Note files:
-- `notes/domain3/01_claude_md_hierarchy.md`
-- `notes/domain3/02_custom_slash_commands.md`
-- `notes/domain3/03_cicd_integration.md`
-- `notes/domain3/04_hooks.md`
-- `notes/domain3/05_permissions_model.md`
+English note files:
+- `notes/en/domain3/01_claude_md_hierarchy.md`
+- `notes/en/domain3/02_custom_slash_commands.md`
+- `notes/en/domain3/03_cicd_integration.md`
+- `notes/en/domain3/04_hooks.md`
+- `notes/en/domain3/05_permissions_model.md`
+
+Spanish note files:
+- `notes/es/domain3/01_jerarquia_claude_md.md`
+- `notes/es/domain3/02_comandos_slash.md`
+- `notes/es/domain3/03_integracion_cicd.md`
+- `notes/es/domain3/04_hooks.md`
+- `notes/es/domain3/05_modelo_permisos.md`
 
 Quiz: 8 questions covering CLAUDE.md hierarchy, slash commands, CI/CD flags, hooks, and permissions.
 
 ### Day 2 — Domains 1 & 5: Agentic Architecture + Context Management
-Note files:
-- `notes/domain1/01_multi_agent_design_patterns.md`
-- `notes/domain1/02_task_decomposition.md`
-- `notes/domain1/03_agentic_loops.md`
-- `notes/domain1/04_subagent_coordination.md`
-- `notes/domain1/05_reliability_patterns.md`
-- `notes/domain5/01_context_window_management.md`
-- `notes/domain5/02_long_running_task_reliability.md`
+English note files:
+- `notes/en/domain1/01_multi_agent_design_patterns.md`
+- `notes/en/domain1/02_task_decomposition.md`
+- `notes/en/domain1/03_agentic_loops.md`
+- `notes/en/domain1/04_subagent_coordination.md`
+- `notes/en/domain1/05_reliability_patterns.md`
+- `notes/en/domain5/01_context_window_management.md`
+- `notes/en/domain5/02_long_running_task_reliability.md`
+
+Spanish note files:
+- `notes/es/domain1/01_patrones_multiagente.md`
+- `notes/es/domain1/02_descomposicion_tareas.md`
+- `notes/es/domain1/03_bucles_agentes.md`
+- `notes/es/domain1/04_coordinacion_subagentes.md`
+- `notes/es/domain1/05_patrones_fiabilidad.md`
+- `notes/es/domain5/01_gestion_ventana_contexto.md`
+- `notes/es/domain5/02_fiabilidad_tareas_largas.md`
 
 Quiz: 10 questions covering multi-agent patterns, agentic loops, subagent coordination, reliability, and context management.
 
 ### Day 3 — Domains 2 & 4: MCP + Prompt Engineering
-Note files:
-- `notes/domain2/01_mcp_fundamentals.md`
-- `notes/domain2/02_stdio_vs_sse.md`
-- `notes/domain2/03_tool_schema_design.md`
-- `notes/domain4/01_prompt_engineering.md`
-- `notes/domain4/02_structured_output_patterns.md`
+English note files:
+- `notes/en/domain2/01_mcp_fundamentals.md`
+- `notes/en/domain2/02_stdio_vs_sse.md`
+- `notes/en/domain2/03_tool_schema_design.md`
+- `notes/en/domain4/01_prompt_engineering.md`
+- `notes/en/domain4/02_structured_output_patterns.md`
+
+Spanish note files:
+- `notes/es/domain2/01_fundamentos_mcp.md`
+- `notes/es/domain2/02_stdio_vs_sse.md`
+- `notes/es/domain2/03_diseno_esquema_herramientas.md`
+- `notes/es/domain4/01_ingenieria_prompts.md`
+- `notes/es/domain4/02_patrones_salida_estructurada.md`
 
 Quiz: 10 questions covering MCP transports, tool schema design, prompt engineering, and structured output enforcement.
 
@@ -103,11 +154,11 @@ Topics to cover per domain quiz:
 
 ## Progress Tracking
 
-After each completed quiz, update `plan.md`:
+After each completed quiz, update the appropriate plan file (`plan.md` for English, `plan.es.md` for Spanish):
 - Check off all items for that domain using `[x]`
 - Mark the day header with ✅ if all items in the day are done
 
-Read `plan.md` at the start of every session to know where the user left off. Never ask the user what they've done — derive it from the checkboxes.
+Read the correct plan file at the start of every session to know where the user left off. Never ask the user what they've done — derive it from the checkboxes.
 
 ---
 
