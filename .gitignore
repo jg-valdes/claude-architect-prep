@@ -1,0 +1,40 @@
+# Claude Code — local/personal settings (never commit these)
+.claude/settings.local.json
+memory/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+
+# Editor directories and files
+.idea/
+.vscode/
+*.swp
+*.swo
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# Logs
+*.log
+logs/
+
+# Dependency directories (in case notes evolve into a tool)
+node_modules/
+__pycache__/
+*.py[cod]
+
+# Environment files
+.env
+.env.local
+.env.*
