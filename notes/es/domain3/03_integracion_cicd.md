@@ -4,98 +4,90 @@
 
 ---
 
-## Modo No Interactivo
+## El Flag `-p` / `--print`
 
-Claude Code está diseñado para ejecutarse en pipelines automatizadas. La clave es usar el **modo no interactivo** para que no solicite entrada del usuario ni muestre una interfaz.
+**El hecho más directamente evaluable del Dominio 3.**
+
+Sin `-p`, Claude Code se queda esperando entrada de teclado en pipelines CI. El flag habilita la ejecución no interactiva — procesa el prompt y sale automáticamente.
 
 ```bash
-claude --print "revisa este PR en busca de problemas de seguridad"
-claude -p "genera una prueba para la función en src/utils.ts"
+claude -p "Revisa estos cambios por problemas de seguridad" --output-format json
 ```
-
-`--print` (o `-p`) le indica a Claude que:
-- Envíe el resultado a stdout
-- Salga inmediatamente al terminar
-- Nunca solicite entrada del usuario
 
 ---
 
-## Flags Clave para CI/CD
+## Flags de Salida Estructurada
+
+Dos flags trabajan juntos para salida legible por máquinas:
 
 | Flag | Propósito |
 |---|---|
-| `--print` / `-p` | Modo no interactivo, salida a stdout |
-| `--model` | Especificar qué modelo usar (ej. `claude-opus-4-7`) |
-| `--allowedTools` | Lista blanca de herramientas específicas que Claude puede usar |
-| `--system-prompt` | Anular el prompt del sistema |
-| `--no-interactive` | Mismo efecto que `--print` |
+| `--output-format json` | Emitir JSON en lugar de prosa |
+| `--json-schema <archivo>` | Validar salida contra un esquema |
 
-### Ejemplo: Restringir herramientas en CI
-```bash
-claude -p "revisa el diff en busca de errores" \
-  --allowedTools "Read,Bash(git diff)" \
-  --model claude-sonnet-4-6
-```
+Estos habilitan a los sistemas automatizados a:
+- Publicar comentarios en línea en PRs
+- Filtrar hallazgos por severidad
+- Rastrear problemas entre ejecuciones
 
 ---
 
-## Casos de Uso Comunes en CI/CD
+## Aislamiento del Contexto de Sesión
 
-### Revisión automática de PRs
-```yaml
-# Ejemplo de GitHub Actions
-- name: Revisión de Claude Code
-  run: |
-    claude -p "Revisa el git diff en busca de errores y problemas de seguridad.
-    Genera un resumen en markdown." \
-    --allowedTools "Read,Bash(git *)"
-```
+> "La misma sesión de Claude que generó código es menos efectiva revisando sus propios cambios."
 
-### Generación de pruebas al hacer commit
-```bash
-claude -p "Genera pruebas unitarias para las nuevas funciones del último commit" \
-  --allowedTools "Read,Write,Bash(git show HEAD)"
-```
+La sesión retiene el contexto de razonamiento de la generación de código — llevando a sesgo de confirmación en la revisión. Las instancias de revisión independientes evalúan código **sin sesgo de justificación previa**.
 
-### Documentación automatizada
-```bash
-claude -p "Actualiza CHANGELOG.md basándote en los commits desde el último tag" \
-  --allowedTools "Read,Write,Bash(git log *)"
-```
+**Enfoque correcto:** Lanzar instancias separadas de Claude Code para generación y revisión.
 
 ---
 
-## Configuración para Entornos CI
+## Contexto de Revisión Incremental
 
-En CI normalmente quieres pre-aprobar herramientas para que Claude no pause esperando permiso. Usa `settings.json`:
+Las revisiones automatizadas deben rastrear hallazgos previos y reportar **solo problemas nuevos o sin resolver**.
 
-```json
-{
-  "permissions": {
-    "allow": [
-      "Read",
-      "Bash(git *)",
-      "Bash(npm run *)"
-    ]
-  }
-}
-```
-
-O pasa `--allowedTools` en línea para mantenerlo explícito por comando.
+Sin esto: los comentarios duplicados aparecen en cada push, erosionando la confianza del desarrollador.
 
 ---
 
-## Puntos Clave para el Examen
+## CLAUDE.md para CI
 
-- `--print` / `-p` es **requerido** para uso no interactivo/CI — sin él Claude abrirá la interfaz interactiva
-- `--allowedTools` es la forma correcta de **restringir el acceso a herramientas** en contextos automatizados
-- Claude Code puede usarse en **cualquier sistema CI** (GitHub Actions, GitLab CI, Jenkins, etc.) — es solo una CLI
-- Siempre restringe las herramientas al **mínimo necesario** para la tarea (principio de mínimo privilegio)
+Los archivos de contexto del proyecto proporcionan a Claude Code invocado por CI:
+- Estándares de prueba y fixtures disponibles
+- Criterios de revisión y áreas de enfoque
+- Información de cobertura de pruebas existente
+
+Esto previene la generación de código repetitivo de bajo valor en contextos automatizados.
 
 ---
 
-## Trampa Común en el Examen
+## API Síncrona vs. API de Lotes
 
-> "Quieres ejecutar Claude Code en un pipeline de GitHub Actions sin interacción del usuario. ¿Qué flag es necesario?"
+| Caso de Uso | API | Latencia |
+|---|---|---|
+| Verificaciones pre-merge (desarrolladores esperan) | Síncrona | Tiempo real |
+| Informes nocturnos, auditorías semanales | API de Lotes | Hasta 24 horas |
+| Flujos de trabajo agénticos con llamadas a herramientas | Síncrona | N/A (Lotes no puede hacer esto) |
 
-Respuesta: `--print` (o `-p`). Sin él, Claude Code entra en modo interactivo y el pipeline se bloqueará indefinidamente.
+**Ahorro de la API de Lotes:** 50% de reducción de costo — pero usar solo para flujos de trabajo tolerantes a latencia.
+
+**Crítico:** La API de Lotes no puede soportar llamadas a herramientas multi-turno dentro de una sola solicitud.
+
+---
+
+## Puntos Clave del Examen
+
+- Flag `-p` = modo no interactivo — **requerido** para todo uso en CI
+- `--output-format json` + `--json-schema` = salida legible por máquinas
+- Auto-revisión (misma sesión) < revisión de instancia independiente
+- API de Lotes = 50% más barata pero hasta 24h de latencia y **sin** llamadas a herramientas
+- La API de Lotes es **incorrecta** para flujos de trabajo bloqueantes pre-merge
+
+---
+
+## Trampas Comunes del Examen
+
+- Solucionar un trabajo CI colgado con variables de entorno o redirección stdin (es el flag `-p` faltante)
+- Asumir que la misma sesión revisa su propia salida tan efectivamente como una instancia independiente
+- Usar la API de Lotes para verificaciones pre-merge donde los desarrolladores están esperando
+- No rastrear hallazgos previos, causando comentarios duplicados en cada push

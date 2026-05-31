@@ -6,18 +6,18 @@
 
 ## ¿Qué Son los Hooks?
 
-Los hooks son comandos de shell que Claude Code ejecuta automáticamente en respuesta a eventos específicos — antes o después del uso de herramientas, al detenerse, etc. Permiten automatizar reacciones a las acciones de Claude sin escribirlas en CLAUDE.md.
+Los hooks son comandos shell que Claude Code ejecuta automáticamente en respuesta a eventos específicos del ciclo de vida — antes o después del uso de herramientas, al detenerse, etc. Aplican comportamiento **de forma determinista**, a diferencia de las instrucciones CLAUDE.md que son probabilísticas.
 
 ---
 
 ## Eventos de Hook
 
-| Evento | Se activa cuando... |
-|---|---|
-| `PreToolUse` | Antes de que Claude llame a cualquier herramienta |
-| `PostToolUse` | Después de que se completa una llamada a herramienta |
-| `Notification` | Cuando Claude envía una notificación |
-| `Stop` | Cuando Claude termina una respuesta |
+| Evento | Se activa cuando... | ¿Puede bloquear? |
+|---|---|---|
+| `PreToolUse` | Antes de que Claude llame cualquier herramienta | Sí (salir con código no-cero) |
+| `PostToolUse` | Después de que una llamada a herramienta se completa | No |
+| `Notification` | Cuando Claude envía una notificación | No |
+| `Stop` | Cuando Claude finaliza una respuesta | No |
 
 ---
 
@@ -32,10 +32,7 @@ Los hooks se definen en `settings.json`:
       {
         "matcher": "Bash",
         "hooks": [
-          {
-            "type": "command",
-            "command": "echo 'A punto de ejecutar un comando bash'"
-          }
+          { "type": "command", "command": "echo 'A punto de ejecutar bash'" }
         ]
       }
     ],
@@ -43,20 +40,14 @@ Los hooks se definen en `settings.json`:
       {
         "matcher": "Write",
         "hooks": [
-          {
-            "type": "command",
-            "command": "npm run lint -- --fix"
-          }
+          { "type": "command", "command": "npm run lint -- --fix" }
         ]
       }
     ],
     "Stop": [
       {
         "hooks": [
-          {
-            "type": "command",
-            "command": "notify-send 'Claude terminó'"
-          }
+          { "type": "command", "command": "notify-send 'Claude terminó'" }
         ]
       }
     ]
@@ -66,54 +57,53 @@ Los hooks se definen en `settings.json`:
 
 ---
 
-## Ubicaciones del Archivo de Configuración
+## Ubicaciones de Archivos de Configuración
 
 | Archivo | Alcance |
 |---|---|
-| `~/.claude/settings.json` | Global — aplica a todos los proyectos |
-| `.claude/settings.json` | Proyecto — subido al repositorio, compartido con el equipo |
-| `.claude/settings.local.json` | Anulación local — no se sube, personal |
+| `~/.claude/settings.json` | Global — todos los proyectos |
+| `.claude/settings.json` | Proyecto — compartido con el equipo via git |
+| `.claude/settings.local.json` | Anulación local — personal, no se hace commit |
 
-**Prioridad:** local > proyecto > global (mismo patrón que CLAUDE.md)
+**Prioridad:** local > proyecto > global
 
 ---
 
 ## El Campo `matcher`
 
-El `matcher` filtra qué herramienta activa el hook:
-
 ```json
-"matcher": "Bash"        // solo se activa en llamadas a la herramienta Bash
-"matcher": "Write"       // solo se activa en llamadas a la herramienta Write
-"matcher": "Bash(npm *)" // solo se activa en comandos bash que coincidan con el glob
+"matcher": "Bash"          // se activa en cualquier llamada a herramienta Bash
+"matcher": "Write"         // se activa en llamadas a Write
+"matcher": "Bash(npm *)"   // se activa en comandos bash que coinciden con el glob
 ```
 
-Omite `matcher` completamente para activar en **todas** las llamadas de ese tipo de evento.
+Omitir `matcher` para activar en **todas** las llamadas a herramientas de ese tipo de evento.
 
 ---
 
-## Casos de Uso Prácticos
+## Hooks vs. CLAUDE.md
 
-- **Auto-lint al escribir archivos:** Ejecutar `eslint --fix` cada vez que Claude escriba un archivo JS/TS
-- **Auto-formato:** Ejecutar `prettier` después de cada `Edit` o `Write`
-- **Logging:** Registrar todos los comandos Bash que ejecuta Claude para auditoría
-- **Notificaciones:** Enviar una notificación de escritorio cuando Claude termine una tarea larga
-- **Bloquear comandos peligrosos:** Usar `PreToolUse` para interceptar y rechazar operaciones de riesgo
-
----
-
-## Puntos Clave para el Examen
-
-- Los hooks se configuran en **`settings.json`**, no en `CLAUDE.md`
-- `PreToolUse` puede **bloquear** una llamada a herramienta saliendo con código distinto de cero
-- `PostToolUse` se ejecuta **después** de la herramienta, por lo que no puede prevenir la acción — solo reaccionar
-- El campo `matcher` usa la misma sintaxis de **patrón glob** que los permisos
-- Los hooks de proyecto (`.claude/settings.json`) se **comparten con el equipo**; los hooks locales (`.claude/settings.local.json`) son personales
+| Hooks | CLAUDE.md |
+|---|---|
+| Configurados en `settings.json` | Instrucciones de configuración para Claude |
+| Ejecutados por el **sistema** (determinista) | Seguidos por Claude (probabilístico) |
+| Disparadores de shell automatizados | Guía de comportamiento |
+| No pueden ser ignorados por el modelo | Pueden omitirse ocasionalmente |
 
 ---
 
-## Trampa Común en el Examen
+## Puntos Clave del Examen
+
+- `PreToolUse` puede **bloquear** una llamada a herramienta (salir con código no-cero)
+- `PostToolUse` no puede prevenir la acción — solo reaccionar a ella
+- Los hooks viven en `settings.json`, **no** en CLAUDE.md
+- Los hooks de proyecto (`.claude/settings.json`) se comparten con el equipo
+- Los hooks locales (`.claude/settings.local.json`) son personales
+
+---
+
+## Trampa Común del Examen
 
 > "Quieres ejecutar `prettier` automáticamente cada vez que Claude edita un archivo. ¿Dónde configuras esto?"
 
-Respuesta: Como un hook `PostToolUse` con `"matcher": "Edit"` en `.claude/settings.json` — **no** en CLAUDE.md (CLAUDE.md son instrucciones para que Claude las siga, no disparadores de shell automatizados).
+Respuesta: Hook `PostToolUse` con `"matcher": "Edit"` en `.claude/settings.json` — **no** en CLAUDE.md (CLAUDE.md son instrucciones para que Claude siga, no disparadores de shell automatizados).

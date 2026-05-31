@@ -1,88 +1,98 @@
-# Comandos Slash Personalizados
+# Comandos Slash Personalizados y Skills
 
 **Peso en el examen:** Parte del Dominio 3 – Configuración y Flujos de Trabajo de Claude Code (20%)
 
 ---
 
-## ¿Qué Son los Comandos Slash Personalizados?
+## Crear Comandos Personalizados
 
-Los comandos slash personalizados te permiten guardar prompts reutilizables como archivos que se pueden invocar con `/nombre-comando` en Claude Code. Son útiles para tareas repetitivas como despliegues, generación de descripciones de PRs o revisiones de código.
+Los comandos creados en `.claude/skills/` o `.claude/commands/` producen `/comandos` idénticos que los desarrolladores pueden invocar. Ambos nombres de directorio funcionan.
 
----
+### Niveles de Alcance
 
-## Estructura de Archivos
-
-Los comandos se almacenan como archivos Markdown:
-
-```
-.claude/commands/           ← Comandos a nivel de proyecto (compartidos con el equipo)
-  deploy.md                 → /deploy
-  run-tests.md              → /run-tests
-  review-pr.md              → /review-pr
-
-~/.claude/commands/         ← Comandos globales (personales, todos los proyectos)
-  mi-plantilla.md           → /mi-plantilla
-```
-
-**Regla de nombres:** El nombre del archivo (sin `.md`) se convierte en el nombre del comando slash.
-
----
-
-## Formato del Archivo de Comando
-
-Un archivo de comando es simplemente un archivo Markdown con el prompt que Claude ejecutará:
-
-```markdown
-# Desplegar en Entorno
-
-Despliega la rama actual en $ARGUMENTS. Antes de desplegar:
-1. Ejecuta `npm run build` y confirma que pasa
-2. Ejecuta `npm test` y confirma que todas las pruebas pasan
-3. Muéstrame el git diff contra main
-4. Pide confirmación antes de continuar
-```
-
-Se invoca como: `/deploy staging` o `/deploy production`
-
----
-
-## Usando `$ARGUMENTS`
-
-`$ARGUMENTS` es un marcador especial que captura todo lo escrito después del nombre del comando.
-
-```bash
-/deploy staging       → $ARGUMENTS = "staging"
-/review-pr 42         → $ARGUMENTS = "42"
-/generate-test utils  → $ARGUMENTS = "utils"
-```
-
-Si no se pasan argumentos, `$ARGUMENTS` es una cadena vacía.
-
----
-
-## Alcance: Proyecto vs Global
-
-| Ubicación | Alcance | Caso de uso |
+| Ubicación | Alcance | ¿Versionado? |
 |---|---|---|
-| `.claude/commands/` | Solo proyecto | Flujos de trabajo del equipo, tareas específicas del repositorio |
-| `~/.claude/commands/` | Todos los proyectos | Comandos de productividad personal |
-
-Los comandos de proyecto tienen precedencia sobre los globales si los nombres coinciden.
+| `.claude/skills/` o `.claude/commands/` | Proyecto — todos los miembros del equipo | Sí |
+| `~/.claude/skills/` o `~/.claude/commands/` | Personal — no compartido | No |
 
 ---
 
-## Puntos Clave para el Examen
+## Tres Opciones Críticas de Frontmatter
 
-- Los comandos son simplemente **archivos Markdown** — sin sintaxis especial más allá de `$ARGUMENTS`
-- Se ejecutan como **prompts** — Claude lee el contenido del archivo y actúa en consecuencia
-- `.claude/commands/` debe **subirse al control de versiones** para compartir con el equipo
-- `~/.claude/commands/` es **personal** y no se comparte
-- El nombre del comando viene del **nombre del archivo**, no del contenido dentro del archivo
+```yaml
+---
+context: fork
+allowed-tools: Read, Grep
+argument-hint: "archivo a analizar"
+---
+```
+
+| Opción | Efecto |
+|---|---|
+| `context: fork` | Ejecuta el skill en contexto de sub-agente aislado — la salida verbosa no contamina la conversación principal |
+| `allowed-tools` | Restringe qué herramientas puede usar el skill (límite de seguridad) |
+| `argument-hint` | Solicita al desarrollador parámetros requeridos cuando se invoca sin argumentos |
 
 ---
 
-## Trampa Común en el Examen
+## Skills vs. CLAUDE.md
 
-> "¿Dónde debes poner un comando slash al que todos los miembros del equipo deban tener acceso?"
+| Skills | CLAUDE.md |
+|---|---|
+| Flujos de trabajo específicos de tarea, bajo demanda | Estándares universales, siempre cargados |
+| Cargados solo cuando se invocan | Aplicados en cada sesión |
+| Usar para: "ejecutar una revisión", "generar un informe" | Usar para: convenciones de nomenclatura, estándares de manejo de errores |
 
-Respuesta: `.claude/commands/` (nivel de proyecto, subido al repositorio) — **no** `~/.claude/commands/` que es personal/global.
+**Anti-patrón:** Colocar procedimientos específicos de tarea en CLAUDE.md.
+
+---
+
+## Reglas Específicas por Ruta (`.claude/rules/`)
+
+Los archivos de reglas usan frontmatter YAML con un campo `paths` que especifica qué archivos activan la carga:
+
+```yaml
+---
+paths: ["terraform/**/*"]
+---
+# Convenciones de Terraform
+- Usar snake_case para nombres de recursos
+- Etiquetar cada recurso con etiquetas de entorno y equipo
+```
+
+**Ventaja clave:** Los patrones glob como `**/*.test.tsx` capturan archivos de prueba en toda la base de código, independientemente de la profundidad del directorio.
+
+### Cuándo Usar Cada Enfoque
+
+| Escenario | Mejor Enfoque |
+|---|---|
+| Estándares universales del equipo | CLAUDE.md raíz |
+| Directorio de un solo paquete | CLAUDE.md a nivel de directorio |
+| Tipo de archivo en muchos directorios | Reglas específicas por ruta con patrones glob |
+| Flujos de trabajo de tarea bajo demanda | Skills en `.claude/skills/` |
+
+---
+
+## Eficiencia de Tokens
+
+Las reglas con alcance por ruta se cargan **solo al editar archivos coincidentes**. CLAUDE.md raíz se carga en cada sesión. Para proyectos grandes con múltiples categorías de convenciones, las reglas con alcance por ruta preservan el presupuesto de tokens.
+
+---
+
+## Puntos Clave del Examen
+
+- Comandos de alcance de proyecto → `.claude/skills/` (compartidos via git)
+- Comandos personales → `~/.claude/skills/` (no versionados)
+- `context: fork` previene que la salida verbosa del skill contamine la conversación principal
+- Los skills son **bajo demanda**; CLAUDE.md es **siempre activo**
+- Reglas específicas por ruta en `.claude/rules/` con frontmatter `paths` = convenciones de tipo de archivo
+
+---
+
+## Trampas Comunes del Examen
+
+- Confundir rutas de alcance usuario (`~/.claude/`) con alcance de proyecto (`.claude/`) para comandos del equipo
+- Tratar los skills como guía siempre activa como CLAUDE.md
+- Olvidar `context: fork` para salidas verbosas
+- Colocar flujos de trabajo específicos de tarea en CLAUDE.md en lugar de skills
+- Elegir CLAUDE.md a nivel de directorio sobre reglas específicas por ruta cuando las convenciones aplican en 50+ ubicaciones

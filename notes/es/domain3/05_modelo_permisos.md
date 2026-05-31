@@ -1,103 +1,107 @@
-# Modelo de Permisos
+# Modelo de Permisos y Modo Plan
 
 **Peso en el examen:** Parte del Dominio 3 – Configuración y Flujos de Trabajo de Claude Code (20%)
 
 ---
 
-## ¿Qué Es el Modelo de Permisos?
+## Modelo de Permisos
 
-Claude Code solicita aprobación del usuario antes de ejecutar herramientas potencialmente riesgosas. El modelo de permisos te permite pre-aprobar (allow) o bloquear (deny) herramientas y comandos específicos para que Claude no pause a preguntar cada vez.
+Los permisos controlan qué herramientas puede usar Claude Code. Se configuran en `settings.json`.
 
----
-
-## Configuración
-
-Los permisos viven en `settings.json`:
+### Allow vs. Deny
 
 ```json
 {
   "permissions": {
-    "allow": [
-      "Read",
-      "Edit",
-      "Write",
-      "Bash(npm run *)",
-      "Bash(git *)"
-    ],
-    "deny": [
-      "Bash(rm -rf *)",
-      "Bash(git push --force *)"
-    ]
+    "allow": ["Bash(git *)", "Read", "Write"],
+    "deny": ["Bash(rm *)", "Bash(sudo *)"]
   }
 }
 ```
 
----
+**Precedencia:** Las reglas `deny` tienen prioridad sobre las reglas `allow` cuando se superponen.
 
-## Sintaxis de Patrones Glob
+### Flag `--allowedTools`
 
-Para comandos `Bash`, puedes hacer coincidir comandos específicos con globs:
+Se pasa en tiempo de invocación para limitar herramientas para esa sesión:
 
-```
-"Bash(npm *)"          → cualquier comando npm
-"Bash(npm run *)"      → solo comandos npm run
-"Bash(git diff)"       → solo exactamente `git diff`
-"Bash(git *)"          → cualquier comando git
-"Read"                 → permitir herramienta Read (sin glob para herramientas no-Bash)
+```bash
+claude --allowedTools "Read,Grep,Bash(git log *)" -p "Resume los cambios recientes"
 ```
 
----
-
-## Orden de Resolución de Permisos
-
-Cuando Claude quiere usar una herramienta:
-
-1. Verificar lista **deny** — si coincide, **bloquear** (deny siempre gana)
-2. Verificar lista **allow** — si coincide, **permitir sin preguntar**
-3. Ninguna coincide → **preguntar al usuario**
-
-**Deny tiene prioridad sobre allow** — si un comando coincide con ambos, se deniega.
+Actúa como una **lista blanca** — solo las herramientas listadas están disponibles. Todas las demás están implícitamente denegadas.
 
 ---
 
-## Alcance de los Archivos de Configuración
+## Modo Plan vs. Ejecución Directa
 
-| Archivo | Alcance | ¿Bajo control de versiones? |
-|---|---|---|
-| `~/.claude/settings.json` | Global (todos los proyectos) | No |
-| `.claude/settings.json` | Proyecto (compartido) | Sí |
-| `.claude/settings.local.json` | Anulación local (personal) | No |
+### La Distinción Central
 
-**Prioridad:** local > proyecto > global
+**La decisión no es sobre dificultad — es sobre ambigüedad.**
+
+Una corrección de bug difícil pero bien definida (traza de stack clara, función única, causa conocida) → **ejecución directa**.
+
+Una reestructuración multi-archivo aparentemente simple pero ambigua → **modo plan**.
 
 ---
 
-## Referencia de Nombres de Herramientas
+### Cuándo Usar Modo Plan
 
-| Herramienta | Qué hace |
+- Cambios arquitecturales a gran escala (reestructuración de monolito, reorganización de módulos)
+- Tareas con múltiples enfoques de implementación válidos
+- Modificaciones multi-archivo (45+ archivos) que necesitan estrategia consistente
+- Exploración de la base de código necesaria antes de los cambios
+- Situaciones donde las decisiones arquitecturales tienen consecuencias posteriores
+
+> El modo plan permite exploración y diseño seguros. Claude lee la base de código, analiza dependencias y propone un enfoque — **todo sin modificar ningún archivo**.
+
+---
+
+### Cuándo Usar Ejecución Directa
+
+- Cambios bien delimitados con trazas de stack claras
+- El enfoque correcto ya es conocido
+- Modificaciones de alcance limitado (función única, un archivo)
+
+---
+
+### El Patrón Híbrido (Plan-Luego-Ejecutar)
+
+1. Explorar y diseñar en modo plan
+2. Implementar usando ejecución directa con estrategia ya determinada
+
+---
+
+### El Subagente Explore
+
+Aísla la salida verbosa de descubrimiento, manteniendo el contexto de la conversación principal limpio para el trabajo de implementación enfocado.
+
+---
+
+## Marco de Decisión
+
+| Tipo de Tarea | Modo Recomendado |
 |---|---|
-| `Read` | Leer archivos |
-| `Edit` | Editar archivos (basado en diff) |
-| `Write` | Escribir/crear archivos |
-| `Bash` | Ejecutar comandos de shell |
-| `WebSearch` | Buscar en la web |
-| `WebFetch` | Obtener una URL |
-| `Agent` | Crear subagentes |
+| Reestructuración arquitectural | Modo plan |
+| Migración de librería (muchos archivos) | Modo plan, luego directo |
+| Corrección de bug en un archivo (traza de stack clara) | Ejecución directa |
+| Base de código desconocida, tarea abierta | Modo plan |
 
 ---
 
-## Puntos Clave para el Examen
+## Puntos Clave del Examen
 
-- **Deny siempre gana** — si un comando está en allow y deny, se deniega
-- Los permisos son **aditivos entre niveles** — proyecto se suma al global, local se suma al proyecto
-- `Bash(npm *)` y `Bash(npm run *)` son **diferentes** — el segundo es más restrictivo
-- Sin reglas allow, Claude solicita permiso en cada uso de herramienta
-- En CI/CD, usa el flag `--allowedTools` en lugar de settings.json para control por comando
+- Las reglas `deny` tienen prioridad sobre las reglas `allow`
+- `--allowedTools` es una **lista blanca** en tiempo de invocación
+- Plan vs. directo = **ambigüedad**, no dificultad
+- Modo plan → sin modificaciones de archivos — solo exploración segura
+- El patrón híbrido: plan → directo es la mejor práctica de producción
 
 ---
 
-## Trampa Común en el Examen
+## Trampas Comunes del Examen
 
-> "Un settings.json de proyecto tiene `"allow": ["Bash(git *)"]` y el settings.json global tiene `"deny": ["Bash(git push *)"]`. ¿Qué sucede cuando Claude intenta ejecutar `git push`?"
-
-Respuesta: **Denegado.** Las reglas deny tienen prioridad sobre las allow, y todos los niveles se combinan — el deny global bloquea el allow del proyecto.
+- Usar ejecución directa para cambios arquitecturales multi-archivo (necesita modo plan)
+- Sobre-planificar correcciones simples de un solo archivo con requisitos claros
+- Omitir el patrón híbrido plan-luego-ejecutar
+- Tratar la dificultad de la tarea como el factor decisivo (es la ambigüedad lo que importa)

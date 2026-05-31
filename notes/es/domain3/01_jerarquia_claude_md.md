@@ -4,77 +4,78 @@
 
 ---
 
-## ¿Qué es CLAUDE.md?
+## La Jerarquía de Tres Niveles
 
-`CLAUDE.md` es el archivo de configuración principal de Claude Code. Proporciona contexto persistente e instrucciones que Claude lee al inicio de cada sesión. Piénsalo como un "README del proyecto para Claude".
-
----
-
-## Ubicaciones de Archivos (Jerarquía)
-
-Claude lee y fusiona archivos CLAUDE.md de múltiples niveles:
-
-```
-~/.claude/CLAUDE.md                  ← 1. Global (todos los proyectos)
-{raíz_proyecto}/CLAUDE.md            ← 2. Nivel de proyecto
-{raíz_proyecto}/.claude/CLAUDE.md    ← 2. También nivel de proyecto
-{raíz_proyecto}/{subdir}/CLAUDE.md   ← 3. Subdirectorio (anulación local)
-```
-
-**Regla de prioridad:** Más específico = mayor prioridad.
-Un `CLAUDE.md` de subdirectorio anula al del proyecto. Uno de proyecto anula al global.
-
-Todos los archivos se **fusionan**, no se reemplazan — las instrucciones globales siguen aplicando a menos que sean explícitamente contradichas.
+| Nivel | Ubicación | ¿Versionado? | Alcance |
+|---|---|---|---|
+| Usuario | `~/.claude/CLAUDE.md` | No | Solo ese desarrollador |
+| Proyecto | `.claude/CLAUDE.md` o `CLAUDE.md` raíz | Sí | Todos los miembros del equipo |
+| Directorio | `packages/api/CLAUDE.md` (cualquier subdirectorio) | Sí | Solo ese directorio |
 
 ---
 
-## Qué Incluir en CLAUDE.md
+## Orden de Carga y Manejo de Conflictos
 
-### Comandos
-```markdown
-## Construcción y Pruebas
-- Construir: `npm run build`
-- Pruebas: `npm test`
-- Lint: `npm run lint`
-```
+Los archivos se **concatenan en el contexto**, no se anulan entre sí. La carga va del alcance más amplio al más específico — el contenido más cercano al directorio de trabajo se lee al final.
 
-### Convenciones
-```markdown
-## Estilo de Código
-- Usar TypeScript en modo estricto
-- Preferir `const` sobre `let`
-- Sin tipos `any`
-```
+Dentro de un directorio, `CLAUDE.local.md` se agrega **después** de `CLAUDE.md`.
 
-### Notas de arquitectura
-```markdown
-## Arquitectura
-- La autenticación se maneja en `src/middleware/auth.ts`
-- Nunca escribir directamente a la BD — siempre usar la capa de repositorio
-```
+**Crítico:** "Si dos reglas se contradicen, Claude puede elegir una arbitrariamente." CLAUDE.md proporciona guía sin aplicación estricta.
 
-### Instrucciones de comportamiento
-```markdown
-## Instrucciones para Claude
-- Siempre ejecutar las pruebas antes de marcar una tarea como completada
-- Nunca modificar archivos de migración
-- Preguntar antes de eliminar cualquier archivo
-```
+Para **cumplimiento garantizado** → usar `settings.json` (aplicado por el cliente) o hooks (vinculados al ciclo de vida).
 
 ---
 
-## Puntos Clave para el Examen
+## Organización Modular con Importaciones de Ruta @
 
-- `CLAUDE.md` se **carga automáticamente** — no necesitas referenciarlo en los prompts
-- Múltiples archivos se **fusionan**, con archivos más específicos tomando precedencia
-- Está pensado para **subirse al control de versiones** para que todo el equipo se beneficie
-- `~/.claude/CLAUDE.md` global es para preferencias personales que aplican en todas partes
-- Los archivos `CLAUDE.md` de subdirectorio solo se activan cuando Claude trabaja **dentro de ese directorio**
+Los archivos CLAUDE.md grandes pueden dividirse usando la sintaxis `@` (sin palabra clave `@import`):
+
+```markdown
+# .claude/CLAUDE.md
+Estándares de codificación:
+@./standards/convenciones-nomenclatura.md
+@./standards/manejo-errores.md
+@./standards/requisitos-pruebas.md
+```
+
+Los archivos se cargan **inmediatamente** — los archivos referenciados se insertan en tiempo de carga. Esto mantiene el mantenimiento del código fuente limpio pero **no** reduce el tamaño del contexto de sesión.
 
 ---
 
-## Trampa Común en el Examen
+## CLAUDE.local.md
 
-> "¿Qué CLAUDE.md tiene precedencia cuando hay un conflicto?"
+- Se carga después de `CLAUDE.md` en el mismo nivel
+- Convencionalmente ignorado en git para ajustes personales
+- Para reglas del equipo, usar `CLAUDE.md` en su lugar
 
-Respuesta: **El más específico** (subdirectorio > proyecto > global). Pero recuerda — las instrucciones no conflictivas de todos los niveles siguen fusionándose y aplicando.
+---
+
+## El Directorio `.claude/rules/`
+
+Alternativa a un único CLAUDE.md — contiene archivos específicos por tema como `testing.md`, `api-conventions.md`, `deployment.md`. Los archivos pueden incluir frontmatter YAML para alcance por rutas.
+
+---
+
+## El Comando `/memory`
+
+`/memory` **revela qué archivos de configuración ya están cargados**. NO carga archivos de configuración.
+
+La configuración se carga automáticamente al inicio de la sesión — `/memory` es una herramienta de diagnóstico, no un mecanismo de activación.
+
+---
+
+## Puntos Clave del Examen
+
+- Nuevo miembro del equipo no recibe instrucciones → la configuración está en nivel **usuario**, no de proyecto
+- La configuración de nivel usuario no se sincroniza via git — permanece en una máquina
+- Las importaciones `@` insertan contenido inmediatamente — no ahorra presupuesto de contexto
+- Reglas contradictorias → Claude elige arbitrariamente; usar `settings.json` para aplicación garantizada
+- `/memory` = diagnosticar qué está cargado, no activarlo
+
+---
+
+## Trampa Común del Examen
+
+> "Los nuevos desarrolladores clonan el repositorio pero obtienen comportamiento diferente en Claude Code que el ingeniero senior."
+
+Respuesta: Las convenciones del ingeniero senior están en `~/.claude/CLAUDE.md` (nivel usuario), no en `.claude/CLAUDE.md` (nivel proyecto). Solución: mover al nivel de proyecto para que se sincronice via git.
