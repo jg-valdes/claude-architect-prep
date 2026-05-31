@@ -4,188 +4,108 @@
 
 ---
 
-## ¿Por Qué Salida Estructurada?
+## Jerarquía de Fiabilidad
 
-Los sistemas agénticos necesitan pasar datos entre pasos de forma programática. La salida en lenguaje natural requiere análisis — la salida estructurada (JSON, XML) puede consumirse directamente por código. La salida estructurada fiable es un requisito previo para pipelines agénticos fiables.
+De más a menos confiable para salida estructurada:
 
----
-
-## Las Tres Capas de Aplicación
-
-Siempre piensa en capas — cada una añade fiabilidad:
-
-```
-Capa 3 (más fuerte): Aplicación a nivel de API (tool_use / modo de salida estructurada)
-Capa 2 (media):      Esquema en el prompt + instrucción de formato explícita
-Capa 1 (más débil):  Solo instrucción ("produce JSON")
-```
-
-Usa la capa más fuerte disponible para sistemas de producción.
+1. **`tool_use` con esquemas JSON** — elimina errores de sintaxis
+2. **JSON basado en prompts** — sin garantías estructurales
 
 ---
 
-## Capa 1: Solo Instrucción en el Prompt
+## Modos del Parámetro `tool_choice`
 
-```
-"Responde con un objeto JSON."
-```
+| Modo | Comportamiento | Garantía de Salida |
+|---|---|---|
+| `"auto"` | El modelo decide: herramienta o conversacional | Ninguna — puede responder con texto |
+| `"any"` | El modelo DEBE llamar alguna herramienta, elige cuál | Salida estructurada garantizada |
+| Nombre específico de herramienta | El modelo DEBE llamar esa herramienta exacta | Control máximo, paso obligatorio |
 
-Fiabilidad: **Baja** — Claude puede añadir bloques markdown, texto explicativo o desviarse del esquema bajo razonamiento complejo.
-
-Uso: Solo para prototipado rápido.
+**Crítico:** `"auto"` NO garantiza salida estructurada. Usar `"any"` o nombre de herramienta específico cuando se requiere estructura.
 
 ---
 
-## Capa 2: Esquema + Instrucción en el Prompt
+## Qué Previene y NO Previene `tool_use` con Esquemas
 
-Proporciona el esquema exacto y repite la instrucción de formato al final:
+| Previene | NO previene |
+|---|---|
+| JSON malformado | Valores incorrectos en campos correctos |
+| Campos requeridos faltantes | Discrepancias en sumas |
+| Incompatibilidades de tipo | Datos mal colocados |
+| — | Valores fabricados/alucinados |
 
-```
-Analiza el sentimiento de la reseña a continuación.
+> `tool_use` con esquemas JSON elimina errores de **sintaxis**. NO previene errores **semánticos**.
 
-Produce un objeto JSON que coincida exactamente con este esquema:
+---
+
+## Mejores Prácticas de Diseño de Esquema
+
+### Campos Opcionales/Anulables
+
+Hacer campos opcionales o anulables cuando los documentos fuente pueden carecer de información:
+
+```json
 {
-  "sentimiento": "positivo" | "negativo" | "neutral",
-  "confianza": número entre 0.0 y 1.0,
-  "frases_clave": array de strings (máx. 3)
+  "fecha_factura": { "type": "string", "nullable": true },
+  "monto_impuesto": { "type": "number", "nullable": true }
 }
-
-Reglas:
-- Solo el objeto JSON
-- Sin bloques de código markdown
-- Sin explicación antes ni después
-
-Reseña: "El producto funciona genial pero el envío tardó muchísimo."
-
-Produce el JSON ahora:
 ```
 
-Fiabilidad: **Media** — mucho mejor que solo instrucción. Falla ocasionalmente en entradas complejas.
+**Por qué:** Los campos requeridos presionan al modelo a inventar valores plausibles (alucinación). Los campos opcionales permiten respuestas `null` honestas.
 
----
+### Valores Enum para Ambigüedad
 
-## Capa 3: Aplicación a Nivel de API
-
-### Patrón Tool Use
-Define la estructura de salida como una "herramienta" que Claude debe llamar. Claude está forzado a producir argumentos que coincidan con tu esquema JSON:
-
-```python
-herramientas = [{
-    "name": "registrar_sentimiento",
-    "description": "Registra el resultado del análisis de sentimiento",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "sentimiento": {
-                "type": "string",
-                "enum": ["positivo", "negativo", "neutral"]
-            },
-            "confianza": {
-                "type": "number",
-                "minimum": 0.0,
-                "maximum": 1.0
-            },
-            "frases_clave": {
-                "type": "array",
-                "items": {"type": "string"},
-                "maxItems": 3
-            }
-        },
-        "required": ["sentimiento", "confianza", "frases_clave"]
-    }
-}]
-
-respuesta = anthropic.messages.create(
-    model="claude-sonnet-4-6",
-    tools=herramientas,
-    tool_choice={"type": "auto"},
-    messages=[{"role": "user", "content": prompt}]
-)
+```json
+"confianza": { "enum": ["alta", "media", "baja", "incierta"] }
 ```
 
-Fiabilidad: **Alta** — el esquema se aplica a nivel de API, no solo en el prompt.
+Usar `"incierta"` como valor enum válido en lugar de forzar una elección.
 
----
+### Manejo de Casos Extremos
 
-## Patrones de Validación
-
-### Validación de Esquema
-Después de recibir la salida, valídala contra tu esquema esperado antes de usarla:
-
-```python
-import jsonschema
-
-esquema = {
-    "type": "object",
-    "required": ["sentimiento", "confianza"],
-    "properties": {
-        "sentimiento": {"type": "string", "enum": ["positivo", "negativo", "neutral"]},
-        "confianza": {"type": "number", "minimum": 0, "maximum": 1}
-    }
-}
-
-jsonschema.validate(salida, esquema)  # lanza ValidationError si es inválido
-```
-
-### Validación de Lógica de Negocio
-La validez del esquema no significa que la salida tenga sentido:
-
-```python
-# Válido en esquema pero lógicamente incorrecto:
-{"sentimiento": "positivo", "confianza": 0.02, "frases_clave": ["terrible", "pésimo"]}
-
-# Añade verificaciones de lógica de negocio:
-if salida["sentimiento"] == "positivo" and salida["confianza"] < 0.5:
-    raise ValueError("Sentimiento positivo con baja confianza — necesita revisión")
+```json
+"categoria": { "type": "string", "enum": ["facturacion", "tecnico", "otro"] },
+"detalle_categoria": { "type": "string", "description": "Requerido cuando categoría es 'otro'" }
 ```
 
 ---
 
-## Patrón de Bucle de Reintento (Listo para Producción)
+## Arquitectura de Revisión Multi-Instancia
 
-```python
-MAX_REINTENTOS = 3
+Para revisiones grandes que sufren de dilución de atención:
 
-def obtener_salida_estructurada(prompt, esquema):
-    ultimo_error = None
-    
-    for intento in range(MAX_REINTENTOS):
-        contexto_reintento = ""
-        if ultimo_error:
-            contexto_reintento = f"\n\nTu respuesta anterior falló la validación: {ultimo_error}\nPor favor corrígelo e inténtalo de nuevo."
-        
-        respuesta = claude.llamar(prompt + contexto_reintento)
-        
-        try:
-            datos = json.loads(respuesta)
-            jsonschema.validate(datos, esquema)
-            return datos  # éxito
-        except Exception as e:
-            ultimo_error = str(e)
-    
-    raise RuntimeError(f"Falló después de {MAX_REINTENTOS} intentos. Último error: {ultimo_error}")
-```
+1. **Pasada 1 — Análisis local por archivo:** Cada archivo analizado individualmente con presupuesto completo de atención
+2. **Pasada 2 — Integración entre archivos:** Análisis separado verificando flujo de datos, contratos de API, contradicciones
 
-Puntos clave:
-- Siempre incluye el **error específico** en el prompt de reintento
-- Limita los reintentos — 3 generalmente es suficiente
-- Lanza excepción después de agotar reintentos — no devuelvas datos incorrectos silenciosamente
+**Por qué las ventanas de contexto más grandes no ayudan:** "Una ventana de contexto más grande no previene que el modelo dé atención desigual a los archivos." El problema es la calidad de la atención, no la capacidad.
 
 ---
 
-## Puntos Clave para el Examen
+## Enrutamiento Basado en Confianza
 
-- **Tres capas de aplicación** — siempre usa la más fuerte disponible para producción
-- **Tool use** es la forma más fiable de aplicar salida estructurada a nivel de API
-- **Valida después de recibir** — nunca asumas que la salida es válida
-- **Incluye el error en los reintentos** — "inténtalo de nuevo" genérico rara vez soluciona el problema
-- La **validación de lógica de negocio** es separada de la validación de esquema — ambas son necesarias
-- **Limita los reintentos** — define un máximo y lanza excepción al agotarlos
+Los hallazgos pueden incluir puntuaciones de confianza (0.0–1.0) que habilitan enrutamiento estratégico:
+- Alta confianza → reporte directo al desarrollador
+- Baja confianza → cola de revisión humana
+
+**Anti-patrón crítico:** "Usar confianza no calibrada para decisiones automatizadas." Los umbrales deben calibrarse usando conjuntos de validación etiquetados.
 
 ---
 
-## Trampa Común en el Examen
+## Puntos Clave del Examen
 
-> "Un paso del pipeline requiere que Claude produzca un array JSON de objetos. Claude ocasionalmente produce un objeto JSON en lugar de un array. ¿Cuál es la corrección correcta?"
+- `"any"` garantiza una llamada a herramienta; `"auto"` no lo hace
+- `tool_use` previene errores de sintaxis, no errores semánticos
+- Campos requeridos = riesgo de alucinación; opcional/anulable = más seguro
+- Auto-revisión (misma sesión) < revisión de instancia independiente
+- El tamaño de la ventana de contexto no soluciona la dilución de atención
+- Calibrar puntuaciones de confianza antes de usarlas para enrutamiento
 
-Respuesta: Usa **aplicación a nivel de API mediante tool_use** con un esquema que especifique `"type": "array"` — esto previene el tipo incorrecto a nivel de API. Actualizar solo la instrucción del prompt es poco fiable para una aplicación consistente.
+---
+
+## Trampas Comunes del Examen
+
+- Asumir que `tool_use` previene todos los errores (solo sintaxis)
+- Confundir `"auto"` (sin garantía) con `"any"` (llamada a herramienta garantizada)
+- Hacer todos los campos del esquema requeridos
+- Usar puntuaciones de confianza brutas no calibradas para enrutamiento automatizado
+- Recomendar ventana de contexto más grande para solucionar dilución de atención
