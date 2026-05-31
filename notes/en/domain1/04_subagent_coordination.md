@@ -4,110 +4,85 @@
 
 ---
 
-## The Orchestrator–Subagent Contract
+## The Agent Tool
 
-When an orchestrator spawns a subagent, it must provide everything the subagent needs — subagents have no shared memory, no access to prior conversation history, and no awareness of other subagents.
+The **Agent tool** (previously called "Task") is the API mechanism for spawning subagents. The old "Task" name remains functional as a backward-compatible alias.
 
-**The orchestrator is responsible for:**
-- Providing complete context in each subagent call
-- Collecting and storing subagent results
-- Passing relevant prior results to subsequent subagents
-- Handling subagent failures and deciding whether to retry, skip, or abort
+**Hard requirement:** A coordinator's `allowedTools` must explicitly include `"Agent"` or `"Task"` to spawn subagents. Without it, the coordinator cannot invoke any subagent, regardless of other configuration.
 
-**The subagent is responsible for:**
-- Executing its specific task
-- Returning a result in the expected format
-- Reporting failure clearly if it can't complete the task
+Each subagent is defined by an **AgentDefinition** specifying:
+1. Description (what the subagent does)
+2. System prompt (its instructions)
+3. Tool restrictions (what tools it can access)
 
 ---
 
-## Passing Context Between Subagents
+## Three Context Passing Rules
 
-Since subagents are stateless, the orchestrator must explicitly pass any context a subagent needs:
+**Rule 1: Pass complete findings in full.**
+Downstream agents cannot retroactively access previous results — all necessary information must be included in their prompt.
 
-```
-# Bad — subagent doesn't know what "the previous research" is
-Orchestrator → Subagent B: "Write a summary of the previous research"
+**Rule 2: Use structured formats separating content from metadata.**
+Findings should include both claims and source information (URLs, document names, page numbers). Without metadata, downstream agents cannot attribute claims to sources.
 
-# Good — orchestrator passes the actual data
-Orchestrator → Subagent B: "Write a summary based on this research: {research_output}"
-```
-
-**Rule:** Never reference prior work implicitly. Always include it explicitly in the prompt.
+**Rule 3: Design coordinator prompts around goals, not procedures.**
+Goal-oriented prompts enable adaptability; procedural instructions constrain subagent flexibility.
 
 ---
 
-## Parallel vs Sequential Coordination
+## Structured Metadata Format
 
-### Sequential (dependent tasks)
-Use when task B needs task A's output:
-```
-Orchestrator → Subagent A → result A → Orchestrator → Subagent B(result A) → result B
+```json
+{
+  "findings": [
+    {
+      "claim": "Solar panel efficiency increased 25% last decade",
+      "source_url": "https://example.com/solar-report",
+      "document_name": "Annual Solar Industry Report 2024",
+      "page_number": 14,
+      "confidence": "high",
+      "retrieved_by": "web_search_agent"
+    }
+  ]
+}
 ```
 
-### Parallel (independent tasks)
-Use when tasks don't depend on each other:
-```
-Orchestrator → Subagent A ─┐
-Orchestrator → Subagent B ─┼→ Orchestrator aggregates all results
-Orchestrator → Subagent C ─┘
-```
-
-**Prefer parallel** wherever dependencies allow — it's faster and scales better.
+Each finding carries **complete source attribution metadata**.
 
 ---
 
-## Result Validation
+## Parallel Spawning
 
-Never trust a subagent's output blindly. The orchestrator should validate:
+When multiple subagents perform independent tasks, emit **multiple Agent tool calls in a single coordinator response** rather than invoking sequentially across separate turns.
 
-1. **Format** — is the output in the expected structure (JSON, markdown, etc.)?
-2. **Completeness** — did the subagent actually do all parts of the task?
-3. **Correctness** — does the output make sense? (spot checks, schema validation)
-
-If validation fails:
-- Retry with a clearer prompt
-- Try a different approach
-- Escalate to a human
+- Reduces latency for independent work
+- The exam specifically tests latency awareness — look for answers mentioning "simultaneously" or "in a single response"
 
 ---
 
-## Error Handling Strategies
+## `fork_session` vs. `--resume`
 
-| Strategy | When to use |
+| Mechanism | Purpose |
 |---|---|
-| **Retry** | Transient failures (network error, timeout) |
-| **Retry with adjusted prompt** | The subagent misunderstood the task |
-| **Skip and continue** | The subtask is optional; failure is acceptable |
-| **Abort and report** | The subtask is critical; proceeding without it is dangerous |
-| **Escalate to human** | The system can't resolve the failure automatically |
+| `fork_session` | Creates independent branches from a shared analysis baseline for **divergent exploration** |
+| `--resume` | Continues a specific named session on the **same investigation path** |
 
----
-
-## Avoiding Common Coordination Mistakes
-
-| Mistake | Fix |
-|---|---|
-| Giving subagents too much context | Pass only what the subagent needs for its specific task |
-| Assuming subagents share state | Always pass state explicitly through the orchestrator |
-| Spawning subagents for trivial tasks | Use subagents for work that justifies the overhead |
-| No error handling on subagent results | Always validate and handle failures |
-| Sequential tasks that could be parallel | Map dependencies; parallelize where possible |
+These serve different purposes and are **frequently confused on exams**.
 
 ---
 
 ## Key Exam Points
 
-- **Subagents are completely stateless** — they know nothing except what the orchestrator tells them in this call
-- **The orchestrator is the single source of truth** for system state
-- **Parallel coordination** requires truly independent tasks — if there's any dependency, it must be sequential
-- **Validate subagent output** before passing it to the next step
-- **Error handling is the orchestrator's job** — not the subagent's
+- `allowedTools` must include `"Agent"` or `"Task"` — hard binary gate
+- Subagents have **isolated context** — only receive explicitly passed information
+- Missing citations = coordinator passed content **without structured metadata**
+- Independent tasks should spawn **in parallel** (single response), not sequentially
+- `fork_session` ≠ `--resume` — know the difference
 
 ---
 
-## Common Trap on the Exam
+## Common Exam Trap
 
-> "A subagent fails to complete its task due to a network timeout. What should the orchestrator do?"
+> A synthesis agent produces unsourced claims while web search and document analysis subagents work correctly. What's the root cause?
 
-Answer: **Retry** the subagent (transient failure). If retries are exhausted, **abort and report** — do not silently continue with incomplete data or infinitely retry. The exact strategy depends on whether the subtask is critical or optional.
+**Answer:** The coordinator passes content to the synthesis agent without structured metadata — source URLs, document names, and page numbers are not included. The synthesis agent cannot cite sources it never received.

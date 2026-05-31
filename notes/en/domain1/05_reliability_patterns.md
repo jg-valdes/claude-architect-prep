@@ -4,139 +4,83 @@
 
 ---
 
-## Why Reliability Is Hard in Agentic Systems
+## Workflow Enforcement: Programmatic vs. Prompt-Based
 
-Agentic systems are non-deterministic, long-running, and take real-world actions. Failures compound: one bad step can corrupt all subsequent steps. Unlike traditional software, you can't always roll back.
+| Approach | Reliability | When to Use |
+|---|---|---|
+| Prompt-based guidance | ~90–95% (probabilistic) | Low-stakes operations, formatting preferences |
+| Programmatic enforcement | 100% (deterministic) | Financial operations, security controls, compliance |
 
-Reliability must be designed in — it doesn't emerge naturally.
-
----
-
-## Core Reliability Patterns
-
-### 1. Define Success Criteria Upfront
-Before any agent takes action, define what "done" and "correct" look like.
-
-```
-Bad:  "Fix the bug"
-Good: "The bug is fixed when `npm test` passes with 0 failures and the 
-       error no longer appears in the logs"
-```
-
-Without a clear definition, the agent can't know when to stop or whether it succeeded.
+**The decision rule:** If a single failure would cause financial loss, security breach, or compliance violation → use programmatic enforcement.
 
 ---
 
-### 2. Checkpointing
-Save intermediate results so long workflows can resume after failure.
+## Prerequisite Gates
 
-```
-Step 1 complete → save result to disk
-Step 2 complete → save result to disk
-Step 3 fails    → resume from Step 2's saved result
-```
+Code-level blocks that prevent tool execution until preconditions are satisfied.
 
-Never assume a long agentic task will complete without interruption.
+**Example:** `process_refund` cannot execute until `get_customer` has returned verified credentials in the current session.
+
+This eliminates the documented ~8% failure rate from prompt-only approaches.
 
 ---
 
-### 3. Validation Gates
-Check the output of each step before passing it to the next.
+## Human-in-the-Loop Triggers
 
-```
-Subagent produces output
-  → Validate format (is it valid JSON?)
-  → Validate content (are required fields present?)
-  → Validate correctness (does it pass a spot check?)
-  → Only then pass to next subagent
-```
+Valid triggers for escalating to a human:
 
-Validation gates prevent bad data from propagating through the pipeline.
+1. **Explicit human request** — customer directly asks to speak with a person; honor immediately without attempting resolution first
+2. **Policy exceptions or gaps** — situation falls outside documented policy boundaries
+3. **Inability to progress** — tool errors, insufficient system access, or technical issues requiring engineering intervention
 
----
-
-### 4. Retry with Backoff
-For transient failures (network errors, rate limits), retry with increasing delays:
-
-```
-Attempt 1 fails → wait 1s → retry
-Attempt 2 fails → wait 2s → retry
-Attempt 3 fails → wait 4s → retry
-Attempt 4 fails → escalate
-```
-
-Always cap retries. Infinite retries can hide real failures.
+**Anti-patterns (unreliable triggers):**
+- Sentiment-based escalation — frustration level doesn't correlate with case complexity
+- Self-reported confidence scores — poorly calibrated, models show false confidence on hard cases
 
 ---
 
-### 5. Human-in-the-Loop Escalation
-For high-stakes or irreversible actions, pause and get human approval:
+## Structured Handoff Requirements
 
-```
-Agent plans to delete 10,000 records
-  → Pause
-  → Show human what will be deleted
-  → Wait for explicit approval
-  → Then proceed
-```
-
-Key triggers for human escalation:
-- Irreversible actions (delete, publish, send)
-- Ambiguous instructions that could be interpreted multiple ways
-- Repeated failures the system can't resolve
-- Actions outside the original scope
+Human agents lack conversation transcript access, so handoffs must be **self-contained** with five mandatory fields:
+1. Customer ID
+2. Conversation summary
+3. Root cause analysis
+4. Refund amount (if applicable)
+5. Recommended action
 
 ---
 
-### 6. Minimal Footprint
-Limit the blast radius of mistakes:
+## Checkpointing for Long Tasks
 
-- Request **only the permissions** needed for the task
-- Take **only the actions** required to achieve the goal
-- Prefer **reversible actions** (move vs delete, staging vs prod)
-- Take **small steps** and validate before proceeding
-
----
-
-### 7. Independent Verification
-Have a separate agent review the primary agent's work:
-
-```
-Writer Agent produces output
-  → Reviewer Agent checks it independently
-  → Discrepancies flagged to orchestrator
-```
-
-Especially useful for high-stakes outputs (code going to production, financial calculations, etc.).
+For extended agentic operations:
+- Save intermediate results to persistent storage at key milestones
+- On failure, resume from last checkpoint rather than restarting from scratch
+- Include session state: current phase, explored paths, key findings, pending steps
 
 ---
 
-## Reliability Anti-Patterns to Avoid
+## Graceful Degradation
 
-| Anti-pattern | Problem |
-|---|---|
-| No stop conditions | Loop runs forever or overshoots goal |
-| No checkpointing | Full restart required after any failure |
-| Trusting subagent output without validation | Bad data propagates silently |
-| Unlimited retries | Hides real failures, wastes resources |
-| Taking irreversible actions without confirmation | Can't undo mistakes |
-| Giving agents too many permissions | Larger blast radius when things go wrong |
+When a subagent fails:
+- **Don't silently suppress** — return empty results marked as success; this prevents all recovery
+- **Don't terminate the pipeline** — discard work from successfully-completed subagents
+- **Do propagate structured errors** with: failure type, attempted action, partial results, alternative approaches
 
 ---
 
 ## Key Exam Points
 
-- **Define success criteria before starting** — not after
-- **Checkpointing** is the primary defense against long-task failures
-- **Validation gates** between steps prevent error propagation
-- **Human escalation** is correct for irreversible or ambiguous actions — not a design flaw
-- **Minimal footprint** reduces blast radius and is an explicit Anthropic design principle
-- **Independent verification** is a reliability pattern, not just a quality pattern
+- Programmatic enforcement = **deterministic**; prompts = **probabilistic**
+- Use prerequisite gates for financial/security/compliance workflows
+- Frustrated customers with resolvable issues → resolve, don't escalate
+- Calm customers requesting policy exceptions → escalate, don't attempt resolution
+- Handoffs must be self-contained — humans don't have transcript access
+- Silent error suppression and pipeline termination are both **wrong**
 
 ---
 
-## Common Trap on the Exam
+## Common Exam Trap
 
-> "An agentic system is about to send 50,000 emails to customers. What reliability pattern is most important to apply here?"
+> "A compliance requirement mandates that AML checks must complete before any fund transfer. What's the correct enforcement mechanism?"
 
-Answer: **Human-in-the-loop escalation** — sending emails is irreversible. The system should pause, show exactly what will be sent and to whom, and require explicit human approval before proceeding. No amount of automated validation substitutes for human sign-off on irreversible, high-impact actions.
+Answer: A **tool call interception hook** (pre-execution) that blocks `transfer_funds` until `aml_check` returns verified. Prompt instructions cannot guarantee 100% compliance — only programmatic enforcement can.

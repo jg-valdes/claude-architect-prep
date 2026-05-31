@@ -4,95 +4,75 @@
 
 ---
 
-## What Is Task Decomposition?
+## Two Decomposition Patterns
 
-Task decomposition is how an orchestrator breaks a large, complex goal into smaller, bounded subtasks that subagents can execute reliably.
+### Pattern 1: Fixed Sequential Pipelines (Prompt Chaining)
 
-Good decomposition is the difference between a system that works and one that drifts, hallucinates, or fails silently.
+Work executes through **predetermined steps in order**. Each step's output feeds into the next. The sequence never changes regardless of intermediate results.
 
----
+**Example:** Code review pipeline → local file analysis → cross-file integration check → compile unified report.
 
-## Principles of Good Decomposition
+**Strengths:** Consistency, reliability, debuggability.
 
-### 1. Each subtask should be independently verifiable
-A subagent's output should be checkable without running the whole system. If you can't tell whether a subtask succeeded, you can't catch failures.
-
-### 2. Subtasks should have clear inputs and outputs
-Vague tasks produce vague results. Define:
-- What data/context goes in
-- What format the result should be in
-- What "done" looks like
-
-### 3. Minimize dependencies between subtasks
-Tasks that don't depend on each other can run in parallel. Map dependencies explicitly before designing the flow.
-
-### 4. Keep subtasks within one context window
-If a subtask requires more context than fits in one window, it needs to be decomposed further.
-
-### 5. Fail fast — validate early
-Put validation steps early in the pipeline. Don't run expensive subagents on bad input.
+**Best for:** Predictable, structured tasks — code reviews, document processing, data extraction, compliance checks.
 
 ---
 
-## How to Decompose: A Framework
+### Pattern 2: Dynamic Adaptive Decomposition
 
-Given a complex task, ask:
+Agents start with a high-level goal, investigate, and **generate plans based on discoveries**. Plans evolve as new information emerges.
 
-1. **What are the distinct phases?** (research, write, review, format)
-2. **Which phases depend on each other?** (write depends on research; review depends on write)
-3. **Which phases can run in parallel?** (multiple research threads)
-4. **What does each phase need as input?** (specific data, not "everything")
-5. **What does each phase produce?** (a specific artifact)
-6. **How do we verify each phase succeeded?** (schema check, human review, automated test)
+**Example:** Adding tests to legacy codebase — map structure → identify high-impact areas → create test plan → adapt as dependencies emerge.
 
----
+**Strengths:** Adaptability and thoroughness for open-ended problems.
 
-## Example: Research Report System
-
-**Bad decomposition:**
-```
-Subagent 1: "Research the topic and write a report"
-```
-Too large, not verifiable, can't parallelize.
-
-**Good decomposition:**
-```
-Subagent 1a: "Search for academic sources on X" → list of URLs + summaries
-Subagent 1b: "Search for news sources on X"     → list of URLs + summaries
-Subagent 1c: "Search for data/statistics on X"  → list of URLs + summaries
-  (all three run in parallel)
-
-Subagent 2: "Given these sources, extract key findings" → structured JSON
-
-Subagent 3: "Given these findings, write a 500-word summary" → markdown
-
-Subagent 4: "Review the summary for accuracy against the sources" → approval or corrections
-```
+**Best for:** Open-ended tasks — legacy system exploration, security audits, debugging unfamiliar code.
 
 ---
 
-## Checkpointing
+## Selection Matrix
 
-For long multi-step workflows, save intermediate results so failures don't require starting over:
-
-- After each major subagent completes, persist its output
-- On failure, resume from the last successful checkpoint
-- Never assume a long agentic task will complete without interruption
-
----
-
-## Key Exam Points
-
-- **Decompose until each subtask fits in one context window** — that's the practical lower bound
-- **Parallel execution requires independent subtasks** — if A needs B's output, they're sequential
-- **Define success criteria per subtask** before running — not after
-- **Checkpointing** is essential for reliability in long workflows
-- The orchestrator owns decomposition logic — subagents just execute
+| Task Characteristics | Pattern | Rationale |
+|---|---|---|
+| Known steps, structured input | Fixed pipeline | Reliability matters more than adaptability |
+| Open-ended, unknown scope | Dynamic decomposition | Adaptability essential when problem undefined |
+| Multi-file code review | Fixed pipeline | Predictable: per-file + cross-file |
+| Legacy exploration | Dynamic decomposition | Issues emerge during investigation |
+| Document extraction | Fixed pipeline | Fields and format predetermined |
+| Debugging unfamiliar systems | Dynamic decomposition | Root cause unknown |
 
 ---
 
-## Common Trap on the Exam
+## Attention Dilution Problem
 
-> "Which task decomposition approach is most appropriate for a complex research task that requires gathering data from multiple sources simultaneously?"
+**Definition:** Processing too many items in one pass produces **inconsistent analysis depth**.
 
-Answer: **Parallel fan-out** — spawn multiple subagents simultaneously to research different sources, then have the orchestrator aggregate results. Sequential decomposition would work but is much slower with no benefit.
+**Symptoms:**
+- Detailed feedback for files 1–5, increasingly shallow for files 10–14
+- Same pattern flagged as inefficient in File 3, approved in File 11
+- Obvious bugs missed in some files while minor issues caught elsewhere
+
+**Root cause:** Model allocates attention across all items. When items exceed capacity, attention per item decreases.
+
+**Solution:** Multi-pass architecture:
+1. **Per-item local analysis passes** — each file analyzed individually with full attention budget
+2. **Cross-file integration pass** — separate analysis checking data flow, API consistency, pattern usage
+
+---
+
+## Common Exam Traps
+
+| Trap | Why It's Wrong |
+|---|---|
+| Suggesting a better model or larger context window | Attention dilution is architectural, not a model limitation |
+| Proposing better prompts | Prompts improve average quality but don't solve fundamental attention allocation |
+| Batching files without a cross-file pass | Misses cross-batch issues like data flow problems |
+| Applying fixed pipelines to open-ended investigations | Wrong pattern — needs dynamic decomposition |
+
+---
+
+## Practice Scenario
+
+> A code review agent produces detailed feedback for the first 5 files but misses obvious bugs in files 10–14. It flags a forEach loop as inefficient in one file while approving identical code in another.
+
+**Correct answer:** Split into per-file local analysis passes plus a separate cross-file integration pass to avoid attention dilution. **Not** a model upgrade or context window increase.

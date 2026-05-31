@@ -1,104 +1,100 @@
-# Multi-Agent System Design Patterns
+# Multi-Agent Design Patterns
 
 **Exam weight:** Domain 1 – Agentic Architecture & Orchestration (27%)
 
 ---
 
-## Why Multi-Agent Systems?
+## The Hub-and-Spoke Pattern
 
-A single Claude instance has limits: one context window, one thread of execution, one set of tools. Multi-agent systems solve this by splitting complex work across specialized agents that run in parallel or in sequence.
+The exam focuses on one specific model: **hub-and-spoke with a central coordinator**. This is the tested pattern.
 
-**Use multi-agent when:**
-- The task is too large for one context window
-- Subtasks can run in parallel to save time
-- Different subtasks need different tools or specializations
-- You need independent verification (one agent checks another's work)
+```
+         ┌──────────────┐
+         │  Coordinator │  ← central hub
+         └──────┬───────┘
+      ┌─────────┼─────────┐
+      ▼         ▼         ▼
+  [Search]  [Analyze]  [Synthesize]  ← subagents
+  Agent     Agent       Agent
+```
 
 ---
 
-## The Two Core Roles
+## Two Roles
 
-### Orchestrator
-- Breaks down the overall goal into subtasks
-- Decides which subagent handles what
-- Collects and synthesizes results
-- Handles errors and retries
-- **Does not do the actual work** — it directs
+### Coordinator Agent
+- Receives the initial task
+- Breaks it into pieces
+- Selects which subagents to activate
+- Passes context to subagents
+- Collects results and manages errors
+- Routes information between subagents
 
-### Subagent
-- Receives a specific, bounded task
-- Executes it using its tools
-- Returns a result
-- Has **no memory of previous turns** — each invocation is stateless
-- Should not need to know about other subagents
+### Subagents
+- Specialized workers handling distinct functions
+- Receive instructions from the coordinator **only**
+- Return results **exclusively** to the coordinator
 
 ---
 
-## Key Design Patterns
+## The Cardinal Rule
 
-### 1. Hub-and-Spoke (most common)
-One orchestrator, many specialized subagents. The orchestrator is the hub; subagents are the spokes.
+> **ALL communication flows through the coordinator. Subagents never communicate directly with each other.**
 
-```
-Orchestrator
-├── Research Agent   → searches the web
-├── Writer Agent     → drafts content
-├── Review Agent     → checks the draft
-└── Formatter Agent  → outputs final format
-```
+This applies universally — not for efficiency, not for convenience, never.
 
-Best for: workflows with distinct, sequential or parallel phases.
+---
 
-### 2. Pipeline (sequential)
-Output of one agent feeds into the next. No central orchestrator — each agent passes work forward.
+## Critical Isolation Principle
 
-```
-Ingestion Agent → Processing Agent → Validation Agent → Output Agent
-```
+**Subagents lack automatic access to:**
+- The coordinator's system instructions
+- Previous coordinator messages
+- Other subagents' outputs (unless explicitly shared)
+- Shared memory or global state
 
-Best for: data transformation, ETL-style tasks where each step transforms the output.
+**Memory doesn't persist:** Two invocations of the same subagent are completely independent. The second has no knowledge of the first.
 
-### 3. Parallel Fan-Out
-Orchestrator sends the same task to multiple agents simultaneously, then aggregates results.
+The coordinator must deliberately include every piece of information each subagent needs in its prompt.
 
-```
-Orchestrator
-├── Agent A (analyzes from angle 1) ─┐
-├── Agent B (analyzes from angle 2) ─┼→ Orchestrator aggregates
-└── Agent C (analyzes from angle 3) ─┘
-```
+---
 
-Best for: research tasks, getting multiple independent perspectives, speed.
+## Four Coordinator Responsibilities
 
-### 4. Hierarchical (nested orchestration)
-An orchestrator delegates to sub-orchestrators, which in turn manage their own subagents.
+1. **Dynamic Selection** — choose which subagents to invoke based on requirements; not all queries need the full pipeline
+2. **Scope Partitioning** — divide topics to eliminate duplication (one agent handles academic sources, another handles news)
+3. **Iterative Refinement** — evaluate output for gaps and re-delegate with targeted queries
+4. **Centralized Routing** — all communication passes through the coordinator
 
-```
-Top Orchestrator
-├── Sub-Orchestrator A
-│   ├── Agent A1
-│   └── Agent A2
-└── Sub-Orchestrator B
-    ├── Agent B1
-    └── Agent B2
-```
+---
 
-Best for: very large, complex tasks with multiple distinct workstreams.
+## The Narrow Decomposition Failure Pattern
+
+A coordinator assigned "impact of AI on creative industries" but only addressed visual arts, missing music, writing, and film.
+
+- The search agent found everything assigned to it ✓
+- The synthesis agent combined what it received ✓
+- But nothing was ever assigned for the missing domains ✗
+
+**Root cause: coordinator decomposition, not subagent capability.**
+
+When output is incomplete in *scope* (not depth), trace failures to the coordinator's decomposition.
 
 ---
 
 ## Key Exam Points
 
-- **Subagents are stateless** — they don't remember prior interactions; the orchestrator must pass all needed context in each call
-- **Orchestrators synthesize, subagents execute** — never conflate the two roles
-- Multi-agent is not always better — for simple tasks, one agent is faster and cheaper
-- **Parallelism is a key benefit** — agents that don't depend on each other should run simultaneously
-- Independent verification (one agent checks another's output) improves reliability
+- Hub-and-spoke is the tested pattern — memorize the two roles
+- Subagents are **stateless** and **isolated** — no shared memory, no inherited context
+- Scope gaps are always the **coordinator's fault**, not the subagent's
+- Direct subagent-to-subagent communication is **never** correct
+- Adding more subagents does not fix decomposition problems
 
 ---
 
-## Common Trap on the Exam
+## Common Exam Traps
 
-> "An orchestrator needs to pass context from a previous subagent's result to the next subagent. How does this work?"
-
-Answer: The **orchestrator** holds the results and explicitly includes the relevant context in the prompt it sends to the next subagent. Subagents do not share memory — the orchestrator is the single source of state.
+- Blaming subagents for coverage gaps that originate in coordinator decomposition
+- Assuming subagents inherit coordinator context or share memory
+- Proposing direct inter-subagent communication as an efficiency fix
+- Adding more subagents to solve decomposition problems
