@@ -4,119 +4,83 @@
 
 ---
 
-## Por Qué la Fiabilidad Es Difícil en Sistemas Agénticos
+## Aplicación de Flujos: Programática vs. Basada en Prompts
 
-Los sistemas agénticos son no deterministas, de larga duración y toman acciones en el mundo real. Los fallos se componen: un paso malo puede corromper todos los pasos posteriores. A diferencia del software tradicional, no siempre puedes deshacer los cambios.
+| Enfoque | Fiabilidad | Cuándo Usar |
+|---|---|---|
+| Guía basada en prompts | ~90–95% (probabilística) | Operaciones de bajo riesgo, preferencias de formato |
+| Aplicación programática | 100% (determinista) | Operaciones financieras, controles de seguridad, cumplimiento |
 
-La fiabilidad debe diseñarse — no emerge naturalmente.
-
----
-
-## Patrones Principales de Fiabilidad
-
-### 1. Definir Criterios de Éxito por Adelantado
-Antes de que cualquier agente tome acción, define qué significa "terminado" y "correcto".
-
-```
-Mal:  "Corrige el bug"
-Bien: "El bug está corregido cuando `npm test` pasa con 0 fallos y el 
-       error ya no aparece en los logs"
-```
-
-### 2. Checkpointing
-Guarda resultados intermedios para que flujos de trabajo largos puedan reanudarse tras un fallo.
-
-```
-Paso 1 completo → guardar resultado en disco
-Paso 2 completo → guardar resultado en disco
-Paso 3 falla    → reanudar desde el resultado guardado del Paso 2
-```
-
-### 3. Puertas de Validación
-Verifica la salida de cada paso antes de pasarla al siguiente.
-
-```
-Subagente produce salida
-  → Validar formato (¿es JSON válido?)
-  → Validar contenido (¿están presentes los campos requeridos?)
-  → Validar corrección (¿pasa una verificación puntual?)
-  → Solo entonces pasar al siguiente subagente
-```
-
-### 4. Reintento con Retroceso Exponencial
-Para fallos transitorios (errores de red, límites de tasa), reintenta con retrasos crecientes:
-
-```
-Intento 1 falla → esperar 1s → reintentar
-Intento 2 falla → esperar 2s → reintentar
-Intento 3 falla → esperar 4s → reintentar
-Intento 4 falla → escalar
-```
-
-Siempre limita los reintentos. Los reintentos infinitos pueden ocultar fallos reales.
-
-### 5. Escalada al Humano
-Para acciones de alto riesgo o irreversibles, pausa y obtén aprobación humana:
-
-```
-El agente planea eliminar 10,000 registros
-  → Pausar
-  → Mostrar al humano qué se eliminará
-  → Esperar aprobación explícita
-  → Entonces proceder
-```
-
-Disparadores clave para escalada humana:
-- Acciones irreversibles (eliminar, publicar, enviar)
-- Instrucciones ambiguas que podrían interpretarse de múltiples formas
-- Fallos repetidos que el sistema no puede resolver
-- Acciones fuera del alcance original
-
-### 6. Mínima Huella
-Limita el radio de impacto de los errores:
-
-- Solicita **solo los permisos** necesarios para la tarea
-- Toma **solo las acciones** requeridas para lograr el objetivo
-- Prefiere **acciones reversibles** (mover vs eliminar, staging vs prod)
-- Da **pasos pequeños** y valida antes de continuar
-
-### 7. Verificación Independiente
-Ten un agente separado revisando el trabajo del agente principal:
-
-```
-Agente Escritor produce salida
-  → Agente Revisor la verifica independientemente
-  → Las discrepancias se reportan al orquestador
-```
+**La regla de decisión:** Si un solo fallo causaría pérdida financiera, brecha de seguridad o violación de cumplimiento → usar aplicación programática.
 
 ---
 
-## Anti-Patrones de Fiabilidad a Evitar
+## Puertas de Prerrequisito
 
-| Anti-patrón | Problema |
-|---|---|
-| Sin condiciones de parada | El bucle corre indefinidamente o sobrepasa el objetivo |
-| Sin checkpointing | Se requiere reinicio completo tras cualquier fallo |
-| Confiar en salida de subagente sin validación | Los datos incorrectos se propagan silenciosamente |
-| Reintentos ilimitados | Oculta fallos reales, desperdicia recursos |
-| Tomar acciones irreversibles sin confirmación | No se pueden deshacer los errores |
-| Dar demasiados permisos a los agentes | Mayor radio de impacto cuando algo sale mal |
+Bloques a nivel de código que impiden la ejecución de herramientas hasta que se cumplan las precondiciones.
+
+**Ejemplo:** `process_refund` no puede ejecutarse hasta que `get_customer` haya devuelto credenciales verificadas en la sesión actual.
+
+Esto elimina la tasa de fallo documentada de ~8% de los enfoques solo con prompts.
 
 ---
 
-## Puntos Clave para el Examen
+## Disparadores de Intervención Humana
 
-- **Define criterios de éxito antes de comenzar** — no después
-- **El checkpointing** es la defensa principal contra fallos en tareas largas
-- **Las puertas de validación** entre pasos previenen la propagación de errores
-- **La escalada humana** es correcta para acciones irreversibles o ambiguas
-- **La mínima huella** reduce el radio de impacto y es un principio de diseño explícito de Anthropic
-- **La verificación independiente** es un patrón de fiabilidad, no solo de calidad
+Disparadores válidos para escalar a un humano:
+
+1. **Solicitud explícita del humano** — el cliente pide directamente hablar con una persona; cumplir inmediatamente sin intentar resolver primero
+2. **Excepciones o lagunas de política** — la situación cae fuera de los límites de política documentados
+3. **Incapacidad de avanzar** — errores de herramientas, acceso insuficiente al sistema o problemas técnicos que requieren intervención de ingeniería
+
+**Anti-patrones (disparadores no confiables):**
+- Escalada basada en sentimiento — el nivel de frustración no correlaciona con la complejidad del caso
+- Puntajes de confianza auto-reportados — mal calibrados, los modelos muestran falsa confianza en casos difíciles
 
 ---
 
-## Trampa Común en el Examen
+## Requisitos de Transferencia Estructurada
 
-> "Un sistema agéntico está a punto de enviar 50,000 correos a clientes. ¿Qué patrón de fiabilidad es más importante aplicar aquí?"
+Los agentes humanos no tienen acceso al transcript de conversación, por lo que las transferencias deben ser **auto-contenidas** con cinco campos obligatorios:
+1. ID del cliente
+2. Resumen de conversación
+3. Análisis de causa raíz
+4. Monto de reembolso (si aplica)
+5. Acción recomendada
 
-Respuesta: **Escalada al humano** — enviar correos es irreversible. El sistema debe pausar, mostrar exactamente qué se enviará y a quién, y requerir aprobación humana explícita antes de proceder.
+---
+
+## Checkpointing para Tareas Largas
+
+Para operaciones agénticas extendidas:
+- Guardar resultados intermedios en almacenamiento persistente en hitos clave
+- Ante un fallo, reanudar desde el último checkpoint en lugar de reiniciar desde cero
+- Incluir estado de sesión: fase actual, rutas exploradas, hallazgos clave, pasos pendientes
+
+---
+
+## Degradación Elegante
+
+Cuando un subagente falla:
+- **No suprimir silenciosamente** — devolver resultados vacíos marcados como exitosos; esto previene toda recuperación
+- **No terminar el pipeline** — descartar trabajo de subagentes completados exitosamente
+- **Sí propagar errores estructurados** con: tipo de fallo, acción intentada, resultados parciales, enfoques alternativos
+
+---
+
+## Puntos Clave del Examen
+
+- Aplicación programática = **determinista**; prompts = **probabilístico**
+- Usar puertas de prerrequisito para flujos financieros/seguridad/cumplimiento
+- Clientes frustrados con problemas resolubles → resolver, no escalar
+- Clientes tranquilos solicitando excepciones de política → escalar, no intentar resolver
+- Las transferencias deben ser auto-contenidas — los humanos no tienen acceso al transcript
+- La supresión silenciosa de errores y la terminación del pipeline son ambas **incorrectas**
+
+---
+
+## Trampa Común del Examen
+
+> "Un requisito de cumplimiento exige que las verificaciones AML se completen antes de cualquier transferencia de fondos. ¿Cuál es el mecanismo de aplicación correcto?"
+
+Respuesta: Un **hook de intercepción de llamada de herramienta** (pre-ejecución) que bloquea `transfer_funds` hasta que `aml_check` devuelva un resultado de pase verificado. Las instrucciones de prompts no pueden garantizar cumplimiento del 100% — solo la aplicación programática puede.

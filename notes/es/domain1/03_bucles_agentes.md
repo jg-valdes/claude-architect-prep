@@ -6,107 +6,77 @@
 
 ## ¿Qué Es un Bucle Agéntico?
 
-Un bucle agéntico es el patrón de ejecución principal de un agente autónomo: el agente toma una acción, observa el resultado, decide qué hacer a continuación, y repite — hasta que el objetivo se logra o se cumple una condición de parada.
-
-```
-┌─────────────────────────────────────────┐
-│                                         │
-│  Planificar → Actuar → Observar → Evaluar │
-│                ↑                  ↓     │
-│                └── bucle hasta terminar ┘
-│                                         │
-└─────────────────────────────────────────┘
-```
+Un bucle agéntico es el **ciclo de ejecución principal** que impulsa a todo agente basado en Claude. Repite un patrón determinista de cuatro pasos hasta su finalización.
 
 ---
 
-## Las Cuatro Fases
+## El Ciclo de Cuatro Pasos
 
-### 1. Planificar
-El agente decide qué acción tomar basándose en el objetivo y el estado actual.
-- Debe referenciar el objetivo original
-- Debe considerar lo que ya se ha hecho
-- Debe elegir la acción mínima siguiente
-
-### 2. Actuar
-El agente llama a una herramienta (Bash, Read, Write, WebSearch, etc.).
-- Una acción por iteración del bucle es más seguro que agrupar muchas
-- Prefiere acciones reversibles — más fácil de recuperarse de errores
-
-### 3. Observar
-El agente lee la salida de la herramienta.
-- ¿Tuvo éxito la acción?
-- ¿Qué nueva información está disponible?
-- ¿Ocurrió algo inesperado?
-
-### 4. Evaluar
-El agente decide: ¿se logró el objetivo? ¿Qué sigue?
-- Si terminó → salir del bucle
-- Si no terminó → volver a Planificar
-- Si está atascado o fallando → escalar o abortar
+| Paso | Acción |
+|------|--------|
+| 1. Enviar solicitud | Llamar a la Messages API con el historial de conversación + resultados de herramientas previos |
+| 2. Inspeccionar `stop_reason` | Verificar el campo de respuesta que indica qué sucede a continuación |
+| 3. Manejar `tool_use` | Ejecutar las herramientas solicitadas, agregar resultados al historial de conversación |
+| 4. Manejar `end_turn` | Presentar la respuesta final cuando Claude señala finalización |
 
 ---
 
-## Condiciones de Parada (Crítico)
+## El Campo `stop_reason` — La Única Señal Confiable
 
-**Siempre define condiciones de parada antes de iniciar un bucle agéntico.** Sin ellas, los bucles corren indefinidamente, sobrepasan el objetivo o se quedan atascados.
+`stop_reason` es **la única señal confiable para el control del bucle**. Dos valores importan:
 
-Buenas condiciones de parada:
-- ✅ "Detener cuando todas las pruebas pasen"
-- ✅ "Detener después de procesar todos los elementos de la lista"
-- ✅ "Detener si la misma acción falla 3 veces seguidas"
-- ✅ "Detener después de un máximo de N iteraciones"
+- `"tool_use"` → continuar el bucle, ejecutar herramientas
+- `"end_turn"` �� terminar el bucle, devolver respuesta
 
-Malas condiciones de parada:
-- ❌ "Detener cuando termine" (demasiado vago — ¿qué es terminar?)
-- ❌ Sin condición de parada alguna
+### Tres Anti-Patrones a Evitar
 
-**Siempre incluye un conteo máximo de iteraciones** como red de seguridad.
+| Anti-Patrón | Por Qué Falla |
+|---|---|
+| Analizar lenguaje natural ("ya terminé") | Ambiguo — Claude puede usar frases similares a mitad de la tarea |
+| Límites de iteración arbitrarios como parada principal | Desperdicia recursos, puede terminar trabajo válido anticipadamente |
+| Verificar `response.content[0].type == "text"` | Falla — Claude devuelve texto *junto con* bloques `tool_use` simultáneamente |
 
 ---
 
-## Modos de Fallo a Diseñar
+## Guiado por el Modelo vs. Pre-Configurado
 
-### Bucles infinitos
-El agente sigue tomando la misma acción que falla. Solución: rastrear acciones fallidas, no reintentar más de N veces.
+Claude **decide la selección de herramientas basándose en el contexto** (guiado por el modelo). Los árboles de decisión pre-configurados carecen de esta adaptabilidad.
 
-### Deriva del objetivo
-El agente se desvía del objetivo original a medida que avanza el bucle. Solución: releer el objetivo original al inicio de cada iteración.
+**Excepción:** los requisitos de cumplimiento determinista anulan la flexibilidad del modelo — usa aplicación programática allí.
 
-### Errores compuestos
-Un error temprano hace que todas las acciones posteriores sean incorrectas. Solución: valida resultados intermedios clave antes de continuar.
+---
 
-### Acciones demasiado amplias
-El agente toma una acción grande e irreversible cuando una más pequeña bastaría. Solución: prefiere acciones mínimas y reversibles en cada paso.
+## Límites de Iteración de Seguridad
+
+Aceptables **como salvaguardas de respaldo** contra bucles desbocados — nunca como mecanismo de terminación principal.
 
 ---
 
 ## Principio de Mínima Huella
 
-Este es un principio central de diseño de Anthropic para sistemas agénticos:
+Principio de diseño central de Anthropic:
 
-> **Solicita solo los permisos necesarios. Toma solo las acciones necesarias. Prefiere lo reversible sobre lo irreversible. Haz menos y confirma cuando haya incertidumbre.**
+> Solicita solo los permisos necesarios. Toma solo las acciones necesarias. Prefiere reversible sobre irreversible. Haz menos y confirma cuando tengas dudas.
 
-En la práctica:
-- No uses `rm -rf` cuando puedes mover a un directorio temporal
-- No escribas en producción cuando puedes escribir en un entorno de staging
-- No proceses todos los registros cuando puedes procesar uno y verificar primero
-- Pide aclaración antes de tomar una acción irreversible en una situación ambigua
-
----
-
-## Puntos Clave para el Examen
-
-- **Las condiciones de parada deben definirse antes de que inicie el bucle** — no como reflexión tardía
-- **Siempre incluye un conteo máximo de iteraciones** como respaldo de seguridad
-- El **principio de mínima huella**: prefiere acciones reversibles y de alcance mínimo
-- Los **errores compuestos** son un riesgo importante — valida resultados intermedios
-- Un agente que no puede progresar debe **escalar a un humano**, no hacer bucle indefinidamente
+En práctica:
+- No usar `rm -rf` cuando puedes mover a un directorio temporal
+- No procesar todos los registros cuando puedes procesar uno y verificar primero
+- Solicitar aclaración antes de acciones irreversibles en situaciones ambiguas
 
 ---
 
-## Trampa Común en el Examen
+## Puntos Clave del Examen
 
-> "Un bucle agéntico tiene la tarea de corregir pruebas fallidas. Después de 10 iteraciones, las pruebas siguen fallando. ¿Cuál es el mejor diseño para manejar esto?"
+- `stop_reason` es la **única** señal confiable de control del bucle
+- **Nunca** usar verificación de tipo de contenido o análisis de lenguaje natural como condiciones de parada
+- Los límites de iteración de seguridad son **respaldos**, no mecanismos principales
+- La selección de herramientas guiada por el modelo habilita flexibilidad; la aplicación programática proporciona garantías
+- Un agente que no puede avanzar debe **escalar a un humano**, no buclar eternamente
 
-Respuesta: El bucle debe tener un **conteo máximo de iteraciones** con un comportamiento definido al alcanzarlo — mostrar el fallo al orquestador u operador humano. Continuar haciendo bucle no es una opción. Detenerse silenciosamente sin reportar tampoco.
+---
+
+## Trampa Común del Examen
+
+> Un agente de soporte al cliente verificaba `response.content[0].type == "text"` para la finalización, perdiendo texto explicativo emparejado con bloques `tool_use`.
+
+Respuesta: Reemplazar las verificaciones de contenido con verificación de `stop_reason`. Claude puede devolver texto y `tool_use` simultáneamente.

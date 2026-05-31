@@ -4,95 +4,75 @@
 
 ---
 
-## ¿Qué Es la Descomposición de Tareas?
+## Dos Patrones de Descomposición
 
-La descomposición de tareas es cómo un orquestador divide un objetivo grande y complejo en subtareas más pequeñas y delimitadas que los subagentes pueden ejecutar de forma fiable.
+### Patrón 1: Pipelines Secuenciales Fijos (Encadenamiento de Prompts)
 
-Una buena descomposición es la diferencia entre un sistema que funciona y uno que se desvía, alucina o falla silenciosamente.
+El trabajo se ejecuta a través de **pasos predeterminados en orden**. La salida de cada paso alimenta al siguiente. La secuencia nunca cambia independientemente de los resultados intermedios.
 
----
+**Ejemplo:** Pipeline de revisión de código → análisis local por archivo → verificación de integración entre archivos → informe unificado.
 
-## Principios de una Buena Descomposición
+**Fortalezas:** Consistencia, fiabilidad, depurabilidad.
 
-### 1. Cada subtarea debe ser verificable independientemente
-La salida de un subagente debe poder verificarse sin ejecutar todo el sistema.
-
-### 2. Las subtareas deben tener entradas y salidas claras
-Las tareas vagas producen resultados vagos. Define:
-- Qué datos/contexto entran
-- En qué formato debe estar el resultado
-- Qué significa "terminado"
-
-### 3. Minimizar dependencias entre subtareas
-Las tareas que no dependen entre sí pueden ejecutarse en paralelo.
-
-### 4. Mantener las subtareas dentro de una ventana de contexto
-Si una subtarea requiere más contexto del que cabe en una ventana, necesita descomponerse más.
-
-### 5. Fallar rápido — validar temprano
-Coloca pasos de validación al inicio del pipeline. No ejecutes subagentes costosos con entrada incorrecta.
+**Ideal para:** Tareas predecibles y estructuradas — revisiones de código, procesamiento de documentos, extracción de datos, verificaciones de cumplimiento.
 
 ---
 
-## Cómo Descomponer: Un Marco de Trabajo
+### Patrón 2: Descomposición Dinámica Adaptativa
 
-Dado un objetivo complejo, pregunta:
+Los agentes comienzan con un objetivo de alto nivel, investigan y **generan planes basados en descubrimientos**. Los planes evolucionan a medida que emerge nueva información.
 
-1. **¿Cuáles son las fases distintas?** (investigar, escribir, revisar, formatear)
-2. **¿Qué fases dependen entre sí?** (escribir depende de investigar; revisar depende de escribir)
-3. **¿Qué fases pueden ejecutarse en paralelo?** (múltiples hilos de investigación)
-4. **¿Qué necesita cada fase como entrada?** (datos específicos, no "todo")
-5. **¿Qué produce cada fase?** (un artefacto específico)
-6. **¿Cómo verificamos que cada fase tuvo éxito?** (verificación de esquema, revisión humana, prueba automatizada)
+**Ejemplo:** Agregar pruebas a una base de código heredada — mapear estructura → identificar áreas de alto impacto → crear plan de pruebas → adaptar a medida que emergen dependencias.
 
----
+**Fortalezas:** Adaptabilidad y exhaustividad para problemas abiertos.
 
-## Ejemplo: Sistema de Informe de Investigación
-
-**Mala descomposición:**
-```
-Subagente 1: "Investiga el tema y escribe un informe"
-```
-Demasiado grande, no verificable, no se puede paralelizar.
-
-**Buena descomposición:**
-```
-Subagente 1a: "Busca fuentes académicas sobre X"  → lista de URLs + resúmenes
-Subagente 1b: "Busca fuentes de noticias sobre X" → lista de URLs + resúmenes
-Subagente 1c: "Busca datos/estadísticas sobre X"  → lista de URLs + resúmenes
-  (los tres ejecutan en paralelo)
-
-Subagente 2: "Dado estas fuentes, extrae hallazgos clave" → JSON estructurado
-
-Subagente 3: "Dado estos hallazgos, escribe un resumen de 500 palabras" → markdown
-
-Subagente 4: "Revisa el resumen para verificar precisión contra las fuentes" → aprobación o correcciones
-```
+**Ideal para:** Tareas abiertas — exploración de sistemas heredados, auditorías de seguridad, depuración de código desconocido.
 
 ---
 
-## Checkpoints
+## Matriz de Selección
 
-Para flujos de trabajo largos de múltiples pasos, guarda resultados intermedios para que los fallos no requieran empezar de nuevo:
-
-- Después de que cada subagente importante complete, persiste su salida
-- En caso de fallo, reanuda desde el último checkpoint exitoso
-- Nunca asumas que una tarea agéntica larga se completará sin interrupciones
-
----
-
-## Puntos Clave para el Examen
-
-- **Descompón hasta que cada subtarea quepa en una ventana de contexto**
-- **La ejecución paralela requiere subtareas independientes** — si A necesita la salida de B, son secuenciales
-- **Define criterios de éxito por subtarea** antes de ejecutar — no después
-- **El checkpointing** es esencial para la fiabilidad en flujos de trabajo largos
-- El orquestador posee la lógica de descomposición — los subagentes solo ejecutan
+| Características de la Tarea | Patrón | Justificación |
+|---|---|---|
+| Pasos conocidos, entrada estructurada | Pipeline fijo | La fiabilidad importa más que la adaptabilidad |
+| Alcance abierto, desconocido | Descomposición dinámica | Adaptabilidad esencial cuando el problema no está definido |
+| Revisión de código multi-archivo | Pipeline fijo | Predecible: por archivo + entre archivos |
+| Exploración de sistema heredado | Descomposición dinámica | Los problemas emergen durante la investigación |
+| Extracción de documentos | Pipeline fijo | Campos y formato predeterminados |
+| Depuración de sistemas desconocidos | Descomposición dinámica | Causa raíz desconocida |
 
 ---
 
-## Trampa Común en el Examen
+## El Problema de Dilución de Atención
 
-> "¿Qué enfoque de descomposición es más apropiado para una tarea de investigación compleja que requiere recopilar datos de múltiples fuentes simultáneamente?"
+**Definición:** Procesar demasiados elementos en una sola pasada produce **profundidad de análisis inconsistente**.
 
-Respuesta: **Fan-out paralelo** — lanza múltiples subagentes simultáneamente para investigar diferentes fuentes, luego el orquestador agrega los resultados.
+**Síntomas:**
+- Retroalimentación detallada para los archivos 1–5, cada vez más superficial para los archivos 10–14
+- El mismo patrón marcado como ineficiente en Archivo 3, aprobado en Archivo 11
+- Errores obvios pasados por alto en algunos archivos mientras se detectan problemas menores en otros
+
+**Causa raíz:** El modelo distribuye atención entre todos los elementos. Cuando los elementos superan la capacidad, la atención por elemento disminuye.
+
+**Solución:** Arquitectura multi-pasada:
+1. **Pasadas de análisis local por elemento** — cada archivo analizado individualmente con presupuesto de atención completo
+2. **Pasada de integración entre archivos** — análisis separado verificando flujo de datos, consistencia de API, uso de patrones
+
+---
+
+## Trampas Comunes del Examen
+
+| Trampa | Por qué es Incorrecta |
+|---|---|
+| Sugerir un modelo mejor o ventana de contexto más grande | La dilución de atención es arquitectural, no una limitación del modelo |
+| Proponer mejores prompts | Los prompts mejoran la calidad promedio pero no resuelven la asignación fundamental de atención |
+| Agrupar archivos sin una pasada entre archivos | Omite problemas entre lotes como problemas de flujo de datos |
+| Aplicar pipelines fijos a investigaciones abiertas | Patrón equivocado — necesita descomposición dinámica |
+
+---
+
+## Escenario de Práctica
+
+> Un agente de revisión de código produce retroalimentación detallada para los primeros 5 archivos pero omite errores obvios en los archivos 10–14. Marca un bucle forEach como ineficiente en un archivo mientras aprueba código idéntico en otro.
+
+**Respuesta correcta:** Dividir en pasadas de análisis local por archivo más una pasada de integración entre archivos separada para evitar la dilución de atención. **No** una actualización del modelo ni un aumento de la ventana de contexto.

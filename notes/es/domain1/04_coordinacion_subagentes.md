@@ -4,110 +4,85 @@
 
 ---
 
-## El Contrato Orquestador–Subagente
+## La Herramienta Agent
 
-Cuando un orquestador lanza un subagente, debe proveer todo lo que el subagente necesita — los subagentes no tienen memoria compartida, no acceden al historial previo de conversación y no tienen conocimiento de otros subagentes.
+La **herramienta Agent** (anteriormente llamada "Task") es el mecanismo de API para instanciar subagentes. El nombre anterior "Task" sigue siendo funcional como alias de retrocompatibilidad.
 
-**El orquestador es responsable de:**
-- Proveer contexto completo en cada llamada a subagente
-- Recopilar y almacenar resultados de subagentes
-- Pasar resultados previos relevantes a subagentes posteriores
-- Manejar fallos de subagentes y decidir si reintentar, omitir o abortar
+**Requisito obligatorio:** El `allowedTools` de un coordinador debe incluir explícitamente `"Agent"` o `"Task"` para instanciar subagentes. Sin esto, el coordinador no puede invocar ningún subagente, independientemente de otra configuración.
 
-**El subagente es responsable de:**
-- Ejecutar su tarea específica
-- Devolver un resultado en el formato esperado
-- Reportar claramente el fallo si no puede completar la tarea
+Cada subagente se define mediante un **AgentDefinition** que especifica:
+1. Descripción (qué hace el subagente)
+2. Prompt del sistema (sus instrucciones)
+3. Restricciones de herramientas (a qué herramientas puede acceder)
 
 ---
 
-## Pasar Contexto Entre Subagentes
+## Tres Reglas para Pasar Contexto
 
-Dado que los subagentes son sin estado, el orquestador debe pasar explícitamente cualquier contexto que un subagente necesite:
+**Regla 1: Pasar hallazgos completos en su totalidad.**
+Los agentes posteriores no pueden acceder retroactivamente a resultados anteriores — toda la información necesaria debe incluirse en su prompt.
 
-```
-# Mal — el subagente no sabe qué es "la investigación anterior"
-Orquestador → Subagente B: "Escribe un resumen de la investigación anterior"
+**Regla 2: Usar formatos estructurados que separen contenido de metadatos.**
+Los hallazgos deben incluir tanto afirmaciones como información de fuente (URLs, nombres de documentos, números de página). Sin metadatos, los agentes posteriores no pueden atribuir afirmaciones a fuentes.
 
-# Bien — el orquestador pasa los datos reales
-Orquestador → Subagente B: "Escribe un resumen basándote en esta investigación: {resultado_investigacion}"
-```
-
-**Regla:** Nunca referenciar trabajo previo implícitamente. Siempre incluirlo explícitamente en el prompt.
+**Regla 3: Diseñar prompts del coordinador en torno a objetivos, no procedimientos.**
+Los prompts orientados a objetivos permiten adaptabilidad; las instrucciones de procedimiento limitan la flexibilidad del subagente.
 
 ---
 
-## Coordinación Paralela vs Secuencial
+## Formato de Metadatos Estructurados
 
-### Secuencial (tareas dependientes)
-Usar cuando la tarea B necesita la salida de la tarea A:
-```
-Orquestador → Subagente A → resultado A → Orquestador → Subagente B(resultado A) → resultado B
+```json
+{
+  "hallazgos": [
+    {
+      "afirmacion": "La eficiencia de paneles solares aumentó 25% en la última década",
+      "url_fuente": "https://ejemplo.com/informe-solar",
+      "nombre_documento": "Informe Anual de la Industria Solar 2024",
+      "numero_pagina": 14,
+      "confianza": "alta",
+      "recuperado_por": "agente_busqueda_web"
+    }
+  ]
+}
 ```
 
-### Paralela (tareas independientes)
-Usar cuando las tareas no dependen entre sí:
-```
-Orquestador → Subagente A ─┐
-Orquestador → Subagente B ─┼→ Orquestador agrega todos los resultados
-Orquestador → Subagente C ─┘
-```
-
-**Prefiere paralelo** donde las dependencias lo permitan — es más rápido y escala mejor.
+Cada hallazgo lleva **metadatos completos de atribución de fuente**.
 
 ---
 
-## Validación de Resultados
+## Instanciación en Paralelo
 
-Nunca confíes ciegamente en la salida de un subagente. El orquestador debe validar:
+Cuando múltiples subagentes realizan tareas independientes, emitir **múltiples llamadas a la herramienta Agent en una sola respuesta del coordinador** en lugar de invocarlos secuencialmente en turnos separados.
 
-1. **Formato** — ¿está la salida en la estructura esperada (JSON, markdown, etc.)?
-2. **Completitud** — ¿realizó el subagente todas las partes de la tarea?
-3. **Corrección** — ¿tiene sentido la salida? (verificaciones puntuales, validación de esquema)
-
-Si la validación falla:
-- Reintentar con un prompt más claro
-- Intentar un enfoque diferente
-- Escalar a un humano
+- Reduce la latencia para trabajo independiente
+- El examen evalúa específicamente la conciencia de latencia — buscar respuestas que mencionen "simultáneamente" o "en una sola respuesta"
 
 ---
 
-## Estrategias de Manejo de Errores
+## `fork_session` vs. `--resume`
 
-| Estrategia | Cuándo usar |
+| Mecanismo | Propósito |
 |---|---|
-| **Reintentar** | Fallos transitorios (error de red, timeout) |
-| **Reintentar con prompt ajustado** | El subagente malentendió la tarea |
-| **Omitir y continuar** | La subtarea es opcional; el fallo es aceptable |
-| **Abortar y reportar** | La subtarea es crítica; continuar sin ella es peligroso |
-| **Escalar a humano** | El sistema no puede resolver el fallo automáticamente |
+| `fork_session` | Crea ramas independientes desde una línea base de análisis compartida para **exploración divergente** |
+| `--resume` | Continúa una sesión nombrada específica en el **mismo camino de investigación** |
+
+Sirven propósitos diferentes y se **confunden frecuentemente en exámenes**.
 
 ---
 
-## Errores Comunes de Coordinación
+## Puntos Clave del Examen
 
-| Error | Solución |
-|---|---|
-| Dar demasiado contexto a los subagentes | Pasar solo lo que el subagente necesita para su tarea específica |
-| Asumir que los subagentes comparten estado | Siempre pasar estado explícitamente a través del orquestador |
-| Lanzar subagentes para tareas triviales | Usar subagentes para trabajo que justifique la sobrecarga |
-| Sin manejo de errores en resultados de subagentes | Siempre validar y manejar fallos |
-| Tareas secuenciales que podrían ser paralelas | Mapear dependencias; paralelizar donde sea posible |
+- `allowedTools` debe incluir `"Agent"` o `"Task"` — requisito binario obligatorio
+- Los subagentes tienen **contexto aislado** — solo reciben información pasada explícitamente
+- Citas faltantes = el coordinador pasó contenido **sin metadatos estructurados**
+- Las tareas independientes deben instanciarse **en paralelo** (respuesta única), no secuencialmente
+- `fork_session` ≠ `--resume` — conocer la diferencia
 
 ---
 
-## Puntos Clave para el Examen
+## Trampa Común del Examen
 
-- **Los subagentes son completamente sin estado** — no saben nada excepto lo que el orquestador les dice en esta llamada
-- **El orquestador es la única fuente de verdad** para el estado del sistema
-- **La coordinación paralela** requiere tareas verdaderamente independientes — si hay cualquier dependencia, debe ser secuencial
-- **Valida la salida del subagente** antes de pasarla al siguiente paso
-- **El manejo de errores es responsabilidad del orquestador** — no del subagente
+> Un agente de síntesis produce afirmaciones sin fuente mientras los subagentes de búsqueda web y análisis de documentos funcionan correctamente. ¿Cuál es la causa raíz?
 
----
-
-## Trampa Común en el Examen
-
-> "Un subagente falla al completar su tarea debido a un timeout de red. ¿Qué debe hacer el orquestador?"
-
-Respuesta: **Reintentar** el subagente (fallo transitorio). Si se agotan los reintentos, **abortar y reportar** — no continuar silenciosamente con datos incompletos ni reintentar infinitamente.
+**Respuesta:** El coordinador pasa contenido al agente de síntesis sin metadatos estructurados — las URLs de fuente, nombres de documentos y números de página no están incluidos. El agente de síntesis no puede citar fuentes que nunca recibió.

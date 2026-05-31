@@ -4,101 +4,97 @@
 
 ---
 
-## ¿Por Qué Sistemas Multi-Agente?
+## El Patrón Hub-and-Spoke
 
-Una sola instancia de Claude tiene límites: una ventana de contexto, un hilo de ejecución, un conjunto de herramientas. Los sistemas multi-agente resuelven esto dividiendo el trabajo complejo entre agentes especializados que ejecutan en paralelo o en secuencia.
+El examen se enfoca en un modelo específico: **hub-and-spoke con un coordinador central**. Este es el patrón evaluado.
 
-**Usa multi-agente cuando:**
-- La tarea es demasiado grande para una ventana de contexto
-- Las subtareas pueden ejecutarse en paralelo para ahorrar tiempo
-- Diferentes subtareas necesitan herramientas o especializaciones distintas
-- Necesitas verificación independiente (un agente verifica el trabajo de otro)
+```
+         ┌──────────────┐
+         │  Coordinador │  ← centro del hub
+         └──────┬───────┘
+      ┌─────────┼────��────┐
+      ▼         ▼         ▼
+  [Búsqueda] [Análisis] [Síntesis]  ← subagentes
+  Agente     Agente      Agente
+```
 
 ---
 
-## Los Dos Roles Principales
+## Dos Roles
 
-### Orquestador
-- Divide el objetivo general en subtareas
-- Decide qué subagente maneja qué
-- Recopila y sintetiza resultados
-- Maneja errores y reintentos
-- **No realiza el trabajo real** — dirige
+### Agente Coordinador
+- Recibe la tarea inicial
+- La divide en partes
+- Selecciona qué subagentes activar
+- Pasa contexto a los subagentes
+- Recopila resultados y gestiona errores
+- Enruta información entre subagentes
 
-### Subagente
-- Recibe una tarea específica y delimitada
-- La ejecuta usando sus herramientas
-- Devuelve un resultado
-- **No tiene memoria de turnos anteriores** — cada invocación es sin estado
-- No necesita saber sobre otros subagentes
-
----
-
-## Patrones de Diseño Clave
-
-### 1. Hub-and-Spoke (más común)
-Un orquestador, muchos subagentes especializados. El orquestador es el hub; los subagentes son los radios.
-
-```
-Orquestador
-├── Agente de Investigación  → busca en la web
-├── Agente Escritor          → redacta contenido
-├── Agente Revisor           → verifica el borrador
-└── Agente Formateador       → produce el formato final
-```
-
-Mejor para: flujos de trabajo con fases distintas, secuenciales o paralelas.
-
-### 2. Pipeline (secuencial)
-La salida de un agente alimenta al siguiente. Sin orquestador central.
-
-```
-Agente Ingesta → Agente Procesamiento → Agente Validación → Agente Salida
-```
-
-Mejor para: transformación de datos, tareas tipo ETL donde cada paso transforma la salida.
-
-### 3. Fan-Out Paralelo
-El orquestador envía la misma tarea a múltiples agentes simultáneamente, luego agrega resultados.
-
-```
-Orquestador
-├── Agente A (analiza desde ángulo 1) ─┐
-├── Agente B (analiza desde ángulo 2) ─┼→ Orquestador agrega
-└── Agente C (analiza desde ángulo 3) ─┘
-```
-
-Mejor para: tareas de investigación, obtener múltiples perspectivas independientes, velocidad.
-
-### 4. Jerárquico (orquestación anidada)
-Un orquestador delega a sub-orquestadores, que a su vez gestionan sus propios subagentes.
-
-```
-Orquestador Principal
-├── Sub-Orquestador A
-│   ├── Agente A1
-│   └── Agente A2
-└── Sub-Orquestador B
-    ├── Agente B1
-    └── Agente B2
-```
-
-Mejor para: tareas muy grandes y complejas con múltiples flujos de trabajo distintos.
+### Subagentes
+- Trabajadores especializados en funciones específicas
+- Reciben instrucciones **solo** del coordinador
+- Devuelven resultados **exclusivamente** al coordinador
 
 ---
 
-## Puntos Clave para el Examen
+## La Regla Cardinal
 
-- **Los subagentes son sin estado** — no recuerdan interacciones previas; el orquestador debe pasar todo el contexto necesario en cada llamada
-- **Los orquestadores sintetizan, los subagentes ejecutan** — nunca confundas los dos roles
-- Multi-agente no siempre es mejor — para tareas simples, un agente es más rápido y económico
-- **El paralelismo es un beneficio clave** — los agentes que no dependen entre sí deben ejecutarse simultáneamente
-- La verificación independiente (un agente verifica la salida de otro) mejora la fiabilidad
+> **TODA la comunicación fluye a través del coordinador. Los subagentes nunca se comunican directamente entre sí.**
+
+Esto se aplica universalmente — no por eficiencia, no por conveniencia, nunca.
 
 ---
 
-## Trampa Común en el Examen
+## Principio de Aislamiento Crítico
 
-> "Un orquestador necesita pasar contexto del resultado de un subagente previo al siguiente. ¿Cómo funciona esto?"
+**Los subagentes NO tienen acceso automático a:**
+- Las instrucciones del sistema del coordinador
+- Mensajes anteriores del coordinador
+- Las salidas de otros subagentes (salvo que se compartan explícitamente)
+- Memoria compartida o estado global
 
-Respuesta: El **orquestador** retiene los resultados e incluye explícitamente el contexto relevante en el prompt que envía al siguiente subagente. Los subagentes no comparten memoria — el orquestador es la única fuente de estado.
+**La memoria no persiste:** Dos invocaciones del mismo subagente son completamente independientes. La segunda no tiene conocimiento de la primera.
+
+El coordinador debe incluir deliberadamente toda la información que cada subagente necesita en su prompt.
+
+---
+
+## Cuatro Responsabilidades del Coordinador
+
+1. **Selección dinámica** — elegir qué subagentes invocar según los requisitos; no todas las consultas necesitan el pipeline completo
+2. **Partición del alcance** — dividir temas para eliminar duplicación (un agente cubre fuentes académicas, otro cubre noticias)
+3. **Refinamiento iterativo** — evaluar la salida en busca de lagunas y re-delegar con consultas dirigidas
+4. **Enrutamiento centralizado** — toda la comunicación pasa por el coordinador
+
+---
+
+## El Patrón de Fallo por Descomposición Insuficiente
+
+Un coordinador asignó "impacto de la IA en industrias creativas" pero solo abordó artes visuales, sin música, escritura ni cine.
+
+- El agente de búsqueda encontró todo lo que se le asignó ✓
+- El agente de síntesis combinó lo que recibi�� ✓
+- Pero nada fue asignado nunca para los dominios faltantes ✗
+
+**Causa raíz: la descomposición del coordinador, no la capacidad del subagente.**
+
+Cuando la salida es incompleta en *alcance* (no en profundidad), rastrea los fallos hacia la descomposición del coordinador.
+
+---
+
+## Puntos Clave del Examen
+
+- Hub-and-spoke es el patrón evaluado — memoriza los dos roles
+- Los subagentes son **sin estado** y **aislados** — sin memoria compartida, sin contexto heredado
+- Las lagunas de alcance son siempre culpa del **coordinador**, no del subagente
+- La comunicación directa entre subagentes es **nunca** correcta
+- Agregar más subagentes no soluciona problemas de descomposición
+
+---
+
+## Trampas Comunes del Examen
+
+- Culpar a los subagentes por lagunas de cobertura que se originan en la descomposición del coordinador
+- Asumir que los subagentes heredan el contexto del coordinador o comparten memoria
+- Proponer comunicación directa entre subagentes como solución de eficiencia
+- Agregar más subagentes para resolver problemas de descomposición
