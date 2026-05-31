@@ -4,189 +4,118 @@
 
 ---
 
-## Why Structured Output?
+## Reliability Hierarchy
 
-Agentic systems need to pass data between steps programmatically. Natural language output requires parsing — structured output (JSON, XML) can be consumed directly by code. Reliable structured output is a prerequisite for reliable agentic pipelines.
+From most to least reliable for structured output:
 
----
-
-## The Three Enforcement Layers
-
-Always think in layers — each adds reliability:
-
-```
-Layer 3 (strongest): API-level enforcement (tool_use / structured output mode)
-Layer 2 (medium):    Schema in the prompt + explicit format instruction
-Layer 1 (weakest):   Instruction only ("output JSON")
-```
-
-Use the strongest layer available for production systems.
+1. **`tool_use` with JSON schemas** — eliminates syntax errors
+2. **Prompt-based JSON** — no structural guarantees
 
 ---
 
-## Layer 1: Prompt Instruction Only
+## `tool_choice` Parameter Modes
 
-```
-"Output your answer as a JSON object."
-```
+| Mode | Behavior | Output Guarantee |
+|---|---|---|
+| `"auto"` | Model decides: tool or conversational | None — may respond with text |
+| `"any"` | Model MUST call some tool, chooses which | Guaranteed structured output |
+| Specific tool name | Model MUST call that exact tool | Maximum control, mandatory step |
 
-Reliability: **Low** — Claude may add markdown fences, explanation text, or deviate from the schema under complex reasoning.
-
-Use for: quick prototyping only.
+**Critical:** `"auto"` does NOT guarantee structured output. Use `"any"` or specific tool name when structure is required.
 
 ---
 
-## Layer 2: Schema + Instruction in Prompt
+## What `tool_use` With Schemas Does and Does NOT Prevent
 
-Provide the exact schema and repeat the format instruction at the end:
+| Prevents | Does NOT prevent |
+|---|---|
+| Malformed JSON | Wrong values in correct fields |
+| Missing required fields | Sum discrepancies |
+| Type mismatches | Misplaced data |
+| — | Fabricated/hallucinated values |
 
-```
-Analyze the sentiment of the review below.
+> `tool_use` with JSON schemas eliminates **syntax** errors. It does NOT prevent **semantic** errors.
 
-Output a JSON object matching this exact schema:
+---
+
+## Schema Design Best Practices
+
+### Optional/Nullable Fields
+
+Make fields optional or nullable when source documents may lack information:
+
+```json
 {
-  "sentiment": "positive" | "negative" | "neutral",
-  "confidence": number between 0.0 and 1.0,
-  "key_phrases": array of strings (max 3)
+  "invoice_date": { "type": "string", "nullable": true },
+  "tax_amount": { "type": "number", "nullable": true }
 }
-
-Rules:
-- Output only the JSON object
-- No markdown code blocks
-- No explanation before or after
-
-Review: "The product works great but shipping took forever."
-
-Output the JSON now:
 ```
 
-Reliability: **Medium** — much better than instruction-only. Fails occasionally on complex inputs.
+**Why:** Required fields pressure the model to invent plausible values (hallucination). Optional fields allow honest `null` responses.
 
----
+### Enum Values for Ambiguity
 
-## Layer 3: API-Level Enforcement
-
-### Tool Use Pattern
-Define the output structure as a "tool" Claude must call. Claude is forced to produce arguments matching your JSON schema:
-
-```python
-tools = [{
-    "name": "record_sentiment",
-    "description": "Record the sentiment analysis result",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "sentiment": {
-                "type": "string",
-                "enum": ["positive", "negative", "neutral"]
-            },
-            "confidence": {
-                "type": "number",
-                "minimum": 0.0,
-                "maximum": 1.0
-            },
-            "key_phrases": {
-                "type": "array",
-                "items": {"type": "string"},
-                "maxItems": 3
-            }
-        },
-        "required": ["sentiment", "confidence", "key_phrases"]
-    }
-}]
-
-response = anthropic.messages.create(
-    model="claude-sonnet-4-6",
-    tools=tools,
-    tool_choice={"type": "auto"},
-    messages=[{"role": "user", "content": prompt}]
-)
+```json
+"confidence": { "enum": ["high", "medium", "low", "unclear"] }
 ```
 
-Reliability: **High** — schema is enforced at the API level, not just in the prompt.
+Use `"unclear"` as a valid enum value instead of forcing a choice.
 
----
+### Edge Case Handling
 
-## Validation Patterns
-
-### Schema Validation
-After receiving output, validate it against your expected schema before using it:
-
-```python
-import jsonschema
-
-schema = {
-    "type": "object",
-    "required": ["sentiment", "confidence"],
-    "properties": {
-        "sentiment": {"type": "string", "enum": ["positive", "negative", "neutral"]},
-        "confidence": {"type": "number", "minimum": 0, "maximum": 1}
-    }
-}
-
-jsonschema.validate(output, schema)  # raises ValidationError if invalid
-```
-
-### Business Logic Validation
-Schema validity doesn't mean the output makes sense:
-
-```python
-# Schema valid but logically wrong:
-{"sentiment": "positive", "confidence": 0.02, "key_phrases": ["terrible", "awful"]}
-
-# Add business logic checks:
-if output["sentiment"] == "positive" and output["confidence"] < 0.5:
-    raise ValueError("Low confidence positive sentiment — needs review")
+```json
+"category": { "type": "string", "enum": ["billing", "technical", "other"] },
+"category_detail": { "type": "string", "description": "Required when category is 'other'" }
 ```
 
 ---
 
-## Retry Loop Pattern (Production-Ready)
+## Multi-Instance Review Architecture
 
-```python
-MAX_RETRIES = 3
+For large reviews suffering from attention dilution:
 
-def get_structured_output(prompt, schema):
-    last_error = None
-    
-    for attempt in range(MAX_RETRIES):
-        # On retry, include the previous error in the prompt
-        retry_context = ""
-        if last_error:
-            retry_context = f"\n\nYour previous response failed validation: {last_error}\nPlease fix this and try again."
-        
-        response = claude.call(prompt + retry_context)
-        
-        try:
-            data = json.loads(response)
-            jsonschema.validate(data, schema)
-            return data  # success
-        except Exception as e:
-            last_error = str(e)
-    
-    raise RuntimeError(f"Failed after {MAX_RETRIES} attempts. Last error: {last_error}")
+1. **Pass 1 — Per-file local analysis:** Each file analyzed individually with full attention budget
+2. **Pass 2 — Cross-file integration:** Separate analysis checking data flow, API contracts, contradictions
+
+**Why larger context windows don't help:** "A larger context window does not prevent the model from giving uneven attention across files." The problem is attention quality, not capacity.
+
+---
+
+## Confidence-Based Routing
+
+Findings can include confidence scores (0.0–1.0) enabling strategic routing:
+- High confidence → direct developer reporting
+- Low confidence → human review queue
+
+**Critical anti-pattern:** "Using uncalibrated confidence for automated decisions." Thresholds must be calibrated using labeled validation sets.
+
+---
+
+## Production Review Architecture
+
 ```
-
-Key points:
-- Always include the **specific error** in the retry prompt
-- Cap retries — 3 is usually enough
-- Raise after exhausting retries — don't silently return bad data
+Generation → Per-file review (independent instances) → 
+Integration review → Confidence routing → 
+Calibration loop (labeled validation sets)
+```
 
 ---
 
 ## Key Exam Points
 
-- **Three enforcement layers** — always use the strongest available for production
-- **Tool use** is the most reliable way to enforce structured output at the API level
-- **Validate after receiving** — never assume output is valid even with good prompts
-- **Include the error in retries** — generic "try again" rarely fixes the issue
-- **Business logic validation** is separate from schema validation — both are needed
-- **Cap retries** — define a max and raise after exhausting them
+- `"any"` guarantees a tool call; `"auto"` does not
+- `tool_use` prevents syntax errors, not semantic errors
+- Required fields = hallucination risk; optional/nullable = safer
+- Self-review (same session) < independent instance review
+- Context window size doesn't fix attention dilution
+- Calibrate confidence scores before using them for routing
 
 ---
 
-## Common Trap on the Exam
+## Common Exam Traps
 
-> "A pipeline step requires Claude to output a JSON array of objects. Claude occasionally outputs a JSON object instead of an array. What is the correct fix?"
-
-Answer: Use **API-level enforcement via tool_use** with a schema that specifies `"type": "array"` — this prevents the wrong type at the API level. Updating the prompt instruction alone is unreliable for consistent enforcement.
+- Assuming `tool_use` prevents all errors (only syntax)
+- Confusing `"auto"` (no guarantee) with `"any"` (guaranteed tool call)
+- Making all schema fields required
+- Using uncalibrated raw confidence scores for automated routing
+- Recommending a larger context window to fix attention dilution
