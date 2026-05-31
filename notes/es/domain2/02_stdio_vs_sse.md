@@ -1,125 +1,82 @@
-# Transporte stdio vs SSE
+# Distribución de Herramientas y Elección de Herramienta
 
 **Peso en el examen:** Dominio 2 – Diseño de Herramientas e Integración MCP (18%)
 
 ---
 
-## Los Dos Transportes Comparados
+## El Problema de Sobrecarga de Herramientas
 
-| | stdio | SSE (Server-Sent Events) |
+El rango óptimo es **4–5 herramientas por agente**, con alcance al rol específico de ese agente.
+
+Dar a un solo agente demasiadas herramientas degrada la fiabilidad de selección e incrementa las tasas de error. Las herramientas deben coincidir con la especialización del agente — un agente de síntesis no debería tener capacidades de búsqueda web, y viceversa.
+
+---
+
+## Tres Modos de Configuración `tool_choice`
+
+| Modo | Comportamiento | Garantía de Salida |
 |---|---|---|
-| **Dónde corre el servidor** | Subproceso local | Servidor HTTP remoto |
-| **Comunicación** | stdin / stdout | HTTP long-polling |
-| **Múltiples clientes** | No — un cliente por proceso | Sí — muchos clientes, un servidor |
-| **Latencia** | Mínima (local) | Latencia de red |
-| **Autenticación** | No necesaria (local) | Requerida (tokens, API keys) |
-| **Complejidad de configuración** | Baja | Mayor |
-| **Mejor para** | Herramientas locales, entornos de desarrollo | Servicios compartidos, herramientas en la nube |
+| `"auto"` (predeterminado) | El modelo decide si llamar una herramienta o responder conversacionalmente | Ninguna — puede responder con texto |
+| `"any"` | El modelo DEBE llamar alguna herramienta pero elige cuál | Salida estructurada garantizada |
+| Nombre específico de herramienta | El modelo DEBE llamar esa herramienta exacta nombrada | Control máximo, paso obligatorio |
+
+**Crítico:** `"auto"` NO garantiza salida estructurada. Usar `"any"` o nombre de herramienta específico cuando se requiere estructura.
 
 ---
 
-## Transporte stdio
+## Herramientas de Rol Cruzado con Alcance
 
-El servidor MCP se lanza como un **proceso hijo** por el cliente. Se comunican mediante streams de entrada/salida estándar.
+En lugar de enrutar todas las solicitudes a través de un coordinador (añadiendo 2–3 viajes de ida y vuelta), los agentes pueden tener versiones restringidas de capacidades necesarias.
 
-```
-Claude Code
-  └── lanza → proceso Servidor MCP
-                 ↕ mensajes JSON-RPC por stdin/stdout
-```
-
-**Cuándo usar stdio:**
-- Herramientas del sistema de archivos (leer/escribir archivos locales)
-- Conexiones a base de datos local
-- Wrappers de herramientas CLI
-- Desarrollo y pruebas
-- Herramientas que solo necesita un usuario
-
-**Ventajas:**
-- Sin sobrecarga de red
-- Sin necesidad de autenticación — aislamiento de procesos a nivel de SO
-- Configuración simple — solo un comando para ejecutar
-- Automáticamente con alcance de un usuario/sesión
-
-**Desventajas:**
-- No se puede compartir entre múltiples usuarios o máquinas
-- Requiere que el servidor esté instalado localmente
+**Ejemplo:** Dar a un agente de síntesis una herramienta `verify_fact` limitada para búsquedas simples mientras se enrutan verificaciones complejas al coordinador. Evita latencia innecesaria.
 
 ---
 
-## Transporte SSE
+## Diseño de Herramientas de Mínimo Privilegio
 
-El servidor MCP corre como un servidor HTTP independiente. Los clientes se conectan mediante HTTP y reciben respuestas como Server-Sent Events.
+Reemplazar herramientas genéricas con alternativas restringidas:
+- Genérica: `fetch_url` (puede obtener cualquier cosa)
+- Restringida: `load_document` (valida solo URLs de documentos)
 
-```
-Claude Code ──solicitud HTTP──→ Servidor MCP (remoto)
-Claude Code ←──stream SSE────── Servidor MCP (remoto)
-```
-
-**Cuándo usar SSE:**
-- Herramientas internas compartidas (múltiples miembros del equipo usan el mismo servidor)
-- Fuentes de datos hospedadas en la nube
-- APIs que necesitan gestión centralizada de autenticación
-- Herramientas de producción de alta disponibilidad
-- Entornos multi-inquilino
-
-**Ventajas:**
-- Compartido entre muchos clientes simultáneamente
-- Gestionado centralmente — actualiza una vez, todos los clientes se benefician
-- Se puede desplegar en infraestructura cloud
-
-**Desventajas:**
-- Requiere autenticación (tokens, OAuth, API keys)
-- Latencia de red en cada llamada a herramienta
-- Más complejo de configurar y asegurar
-- Superficie de ataque adicional (endpoint HTTP expuesto)
+Esto previene el mal uso y aclara el propósito de la herramienta.
 
 ---
 
-## Autenticación en SSE
+## Ejemplo de Distribución por Rol
 
-Dado que los servidores SSE están expuestos mediante HTTP, requieren autenticación:
-
-**Patrones comunes:**
-- **Bearer tokens** — el cliente envía el header `Authorization: Bearer <token>`
-- **API keys** — el cliente envía la clave en el header o parámetro de consulta
-- **OAuth 2.0** — flujo OAuth completo para acceso delegado por usuario
-- **mTLS** — TLS mutuo para autenticación máquina a máquina
-
-El servidor MCP es responsable de validar la autenticación en cada solicitud entrante.
+| Agente | Herramientas (4–5 cada uno) |
+|---|---|
+| Búsqueda Web | `search_web`, `fetch_page`, `extract_links`, `save_snippet` |
+| Análisis de Documentos | `extract_metadata`, `extract_data_points`, `summarize_content`, `verify_claim` |
+| Síntesis | `compile_report`, `verify_fact` (con alcance), `format_citation`, `assess_coverage` |
+| Coordinador | `Agent`, `review_output`, `request_revision` |
 
 ---
 
-## Elegir el Transporte Correcto
+## Transporte stdio vs. SSE
 
-```
-¿La herramienta solo se necesita en la máquina local?
-  Sí → stdio
+| Transporte | Caso de Uso | Autenticación |
+|---|---|---|
+| `stdio` | Servidores locales, procesos en la misma máquina | No se necesita auth (aislamiento de proceso) |
+| `SSE` | Servidores remotos, configuraciones multi-cliente | Requiere autenticación (expuesto en red) |
 
-¿La herramienta se comparte entre un equipo o múltiples máquinas?
-  Sí → SSE
-
-¿Es para desarrollo/prototipado?
-  Sí → stdio (más simple de configurar)
-
-¿Es para producción con múltiples usuarios?
-  Sí → SSE
-```
+Seleccionar `stdio` para herramientas de desarrollo local. Seleccionar `SSE` cuando el servidor MCP se ejecuta en un host remoto o necesita servir a múltiples clientes simultáneamente.
 
 ---
 
-## Puntos Clave para el Examen
+## Puntos Clave del Examen
 
-- **stdio** = subproceso local, sin autenticación, un cliente — simple y rápido
-- **SSE** = HTTP remoto, requiere autenticación, muchos clientes — escalable y compartible
-- **La autenticación es solo una preocupación de SSE** — stdio no la necesita (el aislamiento del SO es suficiente)
-- SSE introduce **latencia de red** — tenla en cuenta al diseñar herramientas sensibles a la latencia
-- Ambos transportes usan el **mismo protocolo MCP** — solo difiere la capa de transporte
+- Conteo óptimo de herramientas por agente: **4–5**, con alcance al rol
+- `"auto"` NO garantiza salida estructurada — usar `"any"` o nombre específico de herramienta
+- Mínimo privilegio: preferir herramientas restringidas sobre genéricas
+- Las herramientas de rol cruzado con alcance reducen los viajes de ida y vuelta del coordinador
+- `stdio` = local, `SSE` = remoto (requiere auth)
 
 ---
 
-## Trampa Común en el Examen
+## Trampas Comunes del Examen
 
-> "Una empresa quiere dar a sus 50 desarrolladores acceso a una herramienta de base de datos interna compartida mediante MCP. ¿Qué transporte deben usar?"
-
-Respuesta: **SSE** — es un servicio compartido con múltiples clientes. stdio solo admite un cliente por instancia de proceso y requiere instalación local en cada máquina.
+- Usar `tool_choice: "auto"` cuando se requiere salida estructurada
+- Asignar 15+ herramientas esperando selección confiable
+- Herramientas genéricas que permiten comportamientos no deseados del agente
+- Enrutar búsquedas simples a través de coordinadores innecesariamente

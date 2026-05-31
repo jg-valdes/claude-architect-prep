@@ -4,133 +4,83 @@
 
 ---
 
-## Por Qué Importa el Diseño de Esquema
+## Por Qué las Descripciones Son Críticas
 
-Claude decide **cuándo** llamar una herramienta y **qué argumentos pasar** basándose enteramente en:
-1. El **nombre** de la herramienta
-2. La **descripción** de la herramienta
-3. El **esquema de entrada** de la herramienta
+**Las descripciones de herramientas son el mecanismo primario que usan los LLMs para la selección de herramientas.**
 
-Un esquema mal diseñado lleva a Claude a llamar la herramienta equivocada, pasar argumentos incorrectos o no llamar una herramienta cuando debería. El buen diseño de esquema es la palanca principal para la fiabilidad de las herramientas.
+No son metadatos opcionales — determinan directamente si los modelos enrutan las consultas correctamente. Una descripción vaga como "Recupera información del cliente" crea ambigüedad que lleva al enrutamiento incorrecto.
 
 ---
 
-## Anatomía de una Definición de Herramienta
+## Cinco Elementos Esenciales
 
-```json
-{
-  "name": "obtener_pedidos_cliente",
-  "description": "Recupera todos los pedidos de un cliente específico. Úsalo cuando necesites consultar el historial de pedidos, verificar el estado de un pedido o encontrar un pedido específico para un cliente.",
-  "inputSchema": {
-    "type": "object",
-    "properties": {
-      "id_cliente": {
-        "type": "string",
-        "description": "El identificador único del cliente (ej. 'CUST-12345')"
-      },
-      "estado": {
-        "type": "string",
-        "enum": ["pendiente", "enviado", "entregado", "cancelado"],
-        "description": "Filtrar pedidos por estado. Omitir para devolver todos los pedidos."
-      },
-      "limite": {
-        "type": "integer",
-        "description": "Número máximo de pedidos a devolver. Por defecto 20.",
-        "default": 20,
-        "minimum": 1,
-        "maximum": 100
-      }
-    },
-    "required": ["id_cliente"]
-  }
-}
-```
+Las descripciones de herramientas de nivel producción deben incluir:
+
+1. **Propósito principal** — declaración inequívoca de qué hace la herramienta
+2. **Especificaciones de entrada** — tipos de datos, formatos, restricciones, campos requeridos vs. opcionales
+3. **Casos de uso concretos** — consultas de ejemplo que muestran el alcance previsto de la herramienta
+4. **Limitaciones y casos extremos** — límites explícitos y modos de fallo
+5. **Diferenciación de herramientas** — declaraciones claras sobre cuándo usar ESTA herramienta vs. alternativas similares
 
 ---
 
-## Reglas para Buenas Descripciones de Herramientas
+## El Problema de Enrutamiento Incorrecto
 
-### Sé específico sobre cuándo usar la herramienta
-```
-Mal:  "Obtiene datos de clientes"
-Bien: "Recupera todos los pedidos de un cliente específico. Úsalo cuando 
-       necesites el historial de pedidos, estado de pedidos o encontrar 
-       un pedido específico."
-```
+Las descripciones mínimas crean ambigüedad cuando múltiples herramientas tienen propósitos superpuestos.
 
-### Distingue entre herramientas similares
-```
-buscar_productos:      "Busca productos por palabra clave, categoría o 
-                        rango de precio. Úsalo cuando no tengas un ID 
-                        específico de producto."
+### Jerarquía de Resolución de Problemas (bajo → alto esfuerzo)
 
-obtener_producto_por_id: "Recupera un único producto por su ID exacto.
-                          Úsalo cuando tengas el ID del producto y 
-                          necesites detalles completos."
-```
+1. ✅ **Ampliar descripciones** (primer paso correcto)
+2. ✗ Ejemplos few-shot (agrega sobrecarga sin solucionar la causa raíz)
+3. ✗ Clasificadores de enrutamiento (sobreingeniería)
+4. ✗ Consolidación de herramientas (válido a largo plazo pero prematuro)
 
-### Incluye pistas de formato en las descripciones de parámetros
-```
-Mal:  "id_cliente": { "description": "El ID del cliente" }
-Bien: "id_cliente": { "description": "El identificador único del cliente (ej. 'CUST-12345')" }
-```
+**Siempre mejorar las descripciones antes de intentar cambios de infraestructura.**
 
 ---
 
-## Mejores Prácticas de Esquema de Entrada
+## Estrategia de División de Herramientas
 
-### Marca correctamente los campos requeridos vs opcionales
-- `"required": ["campo1", "campo2"]` — solo incluye campos verdaderamente obligatorios
-- Los campos opcionales deben tener valores por defecto sensatos
+Las herramientas genéricas deben dividirse en herramientas específicas de propósito:
 
-### Usa enums para valores con restricciones
-```json
-"estado": {
-  "type": "string",
-  "enum": ["activo", "inactivo", "pendiente"]
-}
 ```
-Esto evita que Claude pase valores inválidos y le ayuda a entender las opciones válidas.
-
-### Usa tipos específicos, no solo `string`
-```
-Mal:  "monto": { "type": "string" }
-Bien: "monto": { "type": "number", "minimum": 0 }
+analyze_document  →  extract_document_data
+                     summarize_document
+                     verify_document_claims
 ```
 
-### Evita herramientas demasiado amplias
-Una herramienta que hace 5 cosas diferentes basada en un parámetro `modo` es difícil de usar correctamente. Divídela en 5 herramientas enfocadas.
+Cada herramienta enfocada obtiene una descripción clara que previene el enrutamiento incorrecto.
 
 ---
 
-## Diseño de Límites de Herramientas
+## Mejores Prácticas de Diseño de Esquema
 
-**Una herramienta = una responsabilidad.** Cada herramienta debe hacer exactamente una cosa claramente.
-
-```
-Mal:  gestionar_usuario(accion: "crear" | "actualizar" | "eliminar", ...)
-Bien: crear_usuario(...), actualizar_usuario(...), eliminar_usuario(...)
-```
-
-Beneficios:
-- Claude sabe exactamente qué herramienta llamar para cada tarea
-- El esquema de cada herramienta puede optimizarse para sus entradas específicas
-- Más fácil añadir permisos/restricciones por herramienta
+- Hacer campos **opcionales/anulables** cuando los documentos fuente pueden carecer de información — previene alucinaciones al permitir respuestas `null` honestas
+- Usar **valores enum** como `"unclear"` para casos ambiguos
+- Proporcionar una cadena `"other"` + detalle para casos extremos
+- Incluir instrucciones de normalización de formato en los prompts
 
 ---
 
-## Puntos Clave para el Examen
+## Consejo del Examen: Verificar Conflictos en el Prompt del Sistema
 
-- **Las descripciones de herramientas guían el comportamiento de Claude** — importan más que el código detrás de la herramienta
-- Los **campos requeridos** solo deben incluir lo verdaderamente obligatorio
-- Los **enums** restringen las entradas y ayudan a Claude a entender los valores válidos
-- **Una herramienta, una responsabilidad** — evita herramientas multi-modo
-- **Distingue claramente herramientas similares** en sus descripciones
+Los prompts del sistema pueden contener palabras clave que anulan las descripciones de herramientas bien escritas. Siempre auditar los prompts del sistema en busca de conflictos cuando la selección de herramientas es poco confiable.
 
 ---
 
-## Trampa Común en el Examen
+## Puntos Clave del Examen
 
-> "Claude sigue pasando valores de estado inválidos a una herramienta. ¿Cuál es la corrección más efectiva?"
+- Las descripciones de herramientas = mecanismo de selección **primario**, no metadatos opcionales
+- **Mejorar las descripciones primero** antes de agregar infraestructura de enrutamiento
+- División de herramientas: una herramienta, una responsabilidad clara
+- Los campos opcionales/anulables previenen alucinaciones en datos faltantes
+- Los conflictos en el prompt del sistema pueden anular buenas descripciones — verificar ambos
 
-Respuesta: Añade una restricción **enum** al campo `estado` en el esquema de entrada. Esto tanto previene valores inválidos como le dice explícitamente a Claude qué valores son válidos. Arreglarlo solo en la descripción es menos fiable.
+---
+
+## Trampas Comunes del Examen
+
+- Elegir ejemplos few-shot o clasificadores de enrutamiento como primera solución para el enrutamiento incorrecto
+- Asumir que las descripciones bien escritas son suficientes sin verificar conflictos en el prompt del sistema
+- Mantener herramientas genéricas esperando que las descripciones manejen todos los casos
+- Hacer todos los campos del esquema requeridos, lo que presiona al modelo a alucinar valores

@@ -6,85 +6,111 @@
 
 ## ¿Qué Es MCP?
 
-**Model Context Protocol (MCP)** es un protocolo abierto que estandariza cómo los modelos de IA se conectan a herramientas externas, fuentes de datos y servicios. Piénsalo como un adaptador universal — en lugar de construir una integración personalizada para cada herramienta, construyes un servidor MCP y cualquier cliente compatible con MCP (como Claude) puede usarlo.
-
-```
-Claude (Cliente MCP) ←→ Protocolo MCP ←→ Servidor MCP ←→ Herramienta/Datos externos
-```
+El Model Context Protocol (MCP) extiende las capacidades de Claude conectándolo a sistemas externos — bases de datos, APIs, herramientas de desarrollo. Define una forma estándar de exponer herramientas, recursos y prompts a Claude.
 
 ---
 
-## Conceptos Principales
+## Respuestas de Error Estructuradas
 
-### Servidor MCP
-- Expone **herramientas**, **recursos** y **prompts** al cliente
-- Corre como un proceso separado (local) o servicio remoto
-- Define qué capacidades están disponibles y cómo invocarlas
-- Es responsable de ejecutar la lógica de la herramienta
+Cuando las herramientas MCP fallan, las respuestas de error estructuradas permiten a los agentes recuperarse inteligentemente. El flag `isError` del protocolo MCP señala los fallos.
 
-### Cliente MCP
-- El modelo de IA (Claude) o la aplicación anfitriona
-- Descubre las herramientas disponibles desde el servidor
-- Llama herramientas enviando solicitudes estructuradas
-- Recibe respuestas estructuradas
+### Cuatro Categorías de Error
 
-### Herramientas
-Funciones que el modelo puede invocar. Se definen con nombre, descripción y esquema de entrada:
+| Categoría | Descripción | `isRetryable` | Recuperación |
+|---|---|---|---|
+| **Transitorio** | Timeout, límite de tasa, servicio no disponible | `true` | Reintentar con retroceso exponencial |
+| **Validación** | Solicitud malformada, formato inválido, campos faltantes | `true` | Corregir entrada y reintentar |
+| **Negocio** | Violación de política, conflicto de reglas (solicitud válida, restricción incorrecta) | `false` | Escalar o usar flujo alternativo |
+| **Permiso** | Acceso denegado, credenciales insuficientes | `false` | Escalar u obtener credenciales diferentes |
+
+**Crítico:** Los errores de negocio tienen `isRetryable: false` — reintentar produce fallos idénticos.
+
+---
+
+## Fallo de Acceso vs. Resultado Vacío Válido
+
+| Situación | `isError` | `resultCount` | Acción |
+|---|---|---|---|
+| La herramienta no puede alcanzar la fuente (timeout, fallo de auth) | `true` | — | Considerar reintento |
+| Herramienta ejecutada exitosamente, no encontró coincidencias | `false` | `0` | Sin reintento — esta ES la respuesta |
+
+Esta distinción **previene reintentos innecesarios**. Nunca reintentar un resultado vacío válido.
+
+---
+
+## Configuración del Servidor MCP
+
+### Jerarquía de Alcance
+
+| Archivo | Alcance | ¿Versionado? |
+|---|---|---|
+| `.mcp.json` (raíz del proyecto) | Todo el equipo | Sí — compartido via git |
+| `~/.claude.json` | Personal | No — solo local |
+
+**Principio clave:** Todas las herramientas de todos los servidores configurados (nivel proyecto y usuario) se descubren en tiempo de conexión y están disponibles simultáneamente.
+
+### Expansión de Variables de Entorno
+
+`.mcp.json` soporta la sintaxis `${NOMBRE_VARIABLE}` para mantener credenciales fuera del control de versiones:
 
 ```json
 {
-  "name": "buscar_base_datos",
-  "description": "Busca en la base de datos de productos por palabra clave",
-  "inputSchema": {
-    "type": "object",
-    "properties": {
-      "consulta": { "type": "string", "description": "Palabra clave de búsqueda" },
-      "limite": { "type": "integer", "description": "Máx. resultados", "default": 10 }
-    },
-    "required": ["consulta"]
+  "mcpServers": {
+    "jira": {
+      "command": "npx",
+      "args": ["@empresa/mcp-jira", "--token", "${JIRA_TOKEN}"]
+    }
   }
 }
 ```
 
-### Recursos
-Datos estáticos o dinámicos que el servidor expone (archivos, registros de base de datos, respuestas de API). Los recursos son de solo lectura — a diferencia de las herramientas, no realizan acciones.
-
-### Prompts
-Plantillas de prompts reutilizables que el servidor expone al cliente. Menos comunes en la práctica.
+Cada desarrollador configura sus propios tokens localmente.
 
 ---
 
-## Los Dos Transportes
+## Recursos MCP
 
-MCP admite dos mecanismos de transporte:
+Los recursos exponen catálogos de contenido a los agentes **sin requerir llamadas exploratorias a herramientas**:
+- Resúmenes de issues con títulos y estados
+- Jerarquías de documentación
+- Esquemas de base de datos con nombres de tablas y relaciones
 
-### stdio (Entrada/Salida Estándar)
-- El cliente y el servidor se comunican mediante stdin/stdout
-- El servidor corre como un **subproceso local**
-- Simple de configurar — no requiere red
-- Mejor para herramientas locales (acceso al sistema de archivos, bases de datos locales, herramientas CLI)
-
-### SSE (Server-Sent Events)
-- El cliente y el servidor se comunican mediante **HTTP**
-- El servidor corre como un **servicio remoto**
-- Admite múltiples clientes simultáneos
-- Requiere red — introduce latencia y preocupaciones de autenticación
-- Mejor para servicios compartidos, APIs remotas, herramientas en la nube
+Los recursos reducen las consultas innecesarias al hacer la información inmediatamente disponible.
 
 ---
 
-## Puntos Clave para el Examen
+## Decisión Construir vs. Usar
 
-- MCP es un **protocolo**, no una biblioteca — define el estándar de comunicación
-- Las **herramientas** realizan acciones; los **recursos** exponen datos de solo lectura
-- **stdio** = subproceso local; **SSE** = servicio HTTP remoto
-- La **descripción de la herramienta** es crítica — Claude la usa para decidir cuándo y cómo llamar la herramienta
-- Los servidores MCP son **agnósticos al lenguaje** — pueden escribirse en Python, TypeScript, Go, etc.
+**Usar servidores de la comunidad para:**
+- Integraciones estándar (Jira, GitHub, Slack, Notion)
+- Soluciones probadas que requieren mantenimiento mínimo
+
+**Construir servidores personalizados solo cuando:**
+- El equipo tiene flujos de trabajo específicos que los servidores comunitarios no pueden manejar
+- Se necesita lógica de negocio personalizada en la capa de herramientas
+- Integración con sistemas internos propietarios
 
 ---
 
-## Trampa Común en el Examen
+## Mejora de Descripciones de Herramientas MCP
 
-> "¿Cuál es el propósito principal de MCP?"
+Las descripciones escasas hacen que los agentes prefieran herramientas integradas con documentación más rica. Las descripciones mejoradas deben tener **3–5 oraciones** explicando capacidades, salidas, casos de uso y comparaciones con alternativas.
 
-Respuesta: Proporcionar un **protocolo estandarizado** para conectar modelos de IA a herramientas externas y fuentes de datos — no mejorar el rendimiento del modelo, ni añadir memoria, ni habilitar sistemas multi-agente (aunque puede apoyar esos casos de uso).
+---
+
+## Puntos Clave del Examen
+
+- Configuración de todo el equipo → `.mcp.json` (raíz del proyecto, versionado)
+- Configuración personal/experimental → `~/.claude.json` (nunca se hace commit)
+- Los errores de negocio **no son reintentables** — se evalúa frecuentemente
+- Resultado vacío válido ≠ fallo de acceso — conocer la diferencia
+- Siempre evaluar servidores MCP comunitarios antes de construir personalizados
+- Hacer commit de `.mcp.json` con referencias a variables de entorno, nunca credenciales directas
+
+---
+
+## Trampa Común del Examen
+
+> "¿La configuración de MCP de Jira va en `.mcp.json` o `~/.claude.json`?"
+
+Respuesta: `.mcp.json` en la raíz del proyecto — es de todo el equipo y debe versionarse. `~/.claude.json` es solo para servidores personales/experimentales.
