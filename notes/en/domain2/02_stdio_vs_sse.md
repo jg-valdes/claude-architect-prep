@@ -1,125 +1,82 @@
-# stdio vs SSE Transport
+# Tool Distribution & Tool Choice
 
 **Exam weight:** Domain 2 – Tool Design & MCP Integration (18%)
 
 ---
 
-## The Two Transports Side by Side
+## The Tool Overload Problem
 
-| | stdio | SSE (Server-Sent Events) |
+The optimal range is **4–5 tools per agent**, scoped to that agent's specific role.
+
+Giving a single agent excessive tools degrades selection reliability and increases error rates. Tools should match agent specialization — a synthesis agent shouldn't have web search capabilities, and vice versa.
+
+---
+
+## Three `tool_choice` Configuration Modes
+
+| Mode | Behavior | When to Use |
 |---|---|---|
-| **Where server runs** | Local subprocess | Remote HTTP server |
-| **Communication** | stdin / stdout | HTTP long-polling |
-| **Multiple clients** | No — one client per process | Yes — many clients, one server |
-| **Latency** | Minimal (local) | Network latency |
-| **Authentication** | Not needed (local) | Required (tokens, API keys) |
-| **Setup complexity** | Low | Higher |
-| **Best for** | Local tools, dev environments | Shared services, cloud tools |
+| `"auto"` (default) | Model decides whether to call a tool or respond conversationally | General use — no output guarantee |
+| `"any"` | Model MUST call a tool but selects which one | When structured output is required but you don't care which tool |
+| Specific tool name | Model MUST call that specific named tool | Enforcing workflow ordering, mandatory extraction steps |
+
+**Critical:** Use `"auto"` when structured output is required = wrong answer. Use `"any"` or forced selection.
 
 ---
 
-## stdio Transport
+## Scoped Cross-Role Tools
 
-The MCP server is launched as a **child process** by the client. They talk through standard input/output streams.
+Rather than routing all requests through a coordinator (adding 2–3 round trips), agents can have constrained versions of needed capabilities.
 
-```
-Claude Code
-  └── spawns → MCP Server process
-                 ↕ stdin/stdout JSON-RPC messages
-```
-
-**When to use stdio:**
-- File system tools (read/write local files)
-- Local database connections
-- CLI tool wrappers
-- Development and testing
-- Tools that only one user needs
-
-**Advantages:**
-- Zero network overhead
-- No authentication needed — OS-level process isolation
-- Simple setup — just a command to run
-- Automatically scoped to one user/session
-
-**Disadvantages:**
-- Can't be shared across multiple users or machines
-- Requires the server to be installed locally
+**Example:** Give a synthesis agent a limited `verify_fact` tool for simple lookups while routing complex verifications to the coordinator. Avoids unnecessary latency.
 
 ---
 
-## SSE Transport
+## Least Privilege Tool Design
 
-The MCP server runs as a standalone HTTP server. Clients connect via HTTP and receive responses as Server-Sent Events (a streaming HTTP mechanism).
+Replace generic tools with constrained alternatives:
+- Generic: `fetch_url` (can fetch anything)
+- Constrained: `load_document` (validates document URLs only)
 
-```
-Claude Code ──HTTP request──→ MCP Server (remote)
-Claude Code ←──SSE stream──── MCP Server (remote)
-```
-
-**When to use SSE:**
-- Shared company tools (multiple team members use the same server)
-- Cloud-hosted data sources
-- APIs that need central auth management
-- High-availability production tools
-- Multi-tenant environments
-
-**Advantages:**
-- Shared across many clients simultaneously
-- Centrally managed — update once, all clients benefit
-- Can be deployed to cloud infrastructure
-
-**Disadvantages:**
-- Requires authentication (tokens, OAuth, API keys)
-- Network latency on every tool call
-- More complex to set up and secure
-- Additional attack surface (exposed HTTP endpoint)
+This prevents misuse and clarifies tool purpose.
 
 ---
 
-## Authentication in SSE
+## Example Role-Based Distribution
 
-Since SSE servers are exposed over HTTP, they require authentication:
-
-**Common patterns:**
-- **Bearer tokens** — client sends `Authorization: Bearer <token>` header
-- **API keys** — client sends key in header or query param
-- **OAuth 2.0** — full OAuth flow for user-delegated access
-- **mTLS** — mutual TLS for machine-to-machine auth
-
-The MCP server is responsible for validating auth on every incoming request.
+| Agent | Tools (4–5 each) |
+|---|---|
+| Web Search | `search_web`, `fetch_page`, `extract_links`, `save_snippet` |
+| Document Analysis | `extract_metadata`, `extract_data_points`, `summarize_content`, `verify_claim` |
+| Synthesis | `compile_report`, `verify_fact` (scoped), `format_citation`, `assess_coverage` |
+| Coordinator | `Agent`, `review_output`, `request_revision` |
 
 ---
 
-## Choosing the Right Transport
+## stdio vs. SSE Transport
 
-```
-Is the tool only needed on the local machine?
-  Yes → stdio
+| Transport | Use Case | Authentication |
+|---|---|---|
+| `stdio` | Local servers, same-machine processes | No auth needed (process isolation) |
+| `SSE` | Remote servers, multi-client setups | Requires authentication (network-exposed) |
 
-Is the tool shared across a team or multiple machines?
-  Yes → SSE
-
-Is this for development/prototyping?
-  Yes → stdio (simpler to set up)
-
-Is this for production with multiple users?
-  Yes → SSE
-```
+Select `stdio` for local development tools. Select `SSE` when the MCP server runs on a remote host or needs to serve multiple clients simultaneously.
 
 ---
 
 ## Key Exam Points
 
-- **stdio** = local subprocess, no auth, one client — simple and fast
-- **SSE** = remote HTTP, requires auth, many clients — scalable and shareable
-- **Auth is an SSE concern only** — stdio doesn't need it (OS isolation is sufficient)
-- SSE introduces **network latency** — factor this into tool design for latency-sensitive use cases
-- Both transports use the **same MCP protocol** — only the transport layer differs
+- Optimal tool count per agent: **4–5**, scoped to role
+- `"auto"` does NOT guarantee structured output — use `"any"` or specific tool name
+- Least privilege: prefer constrained tools over generic ones
+- Scoped cross-role tools reduce coordinator round-trips
+- `stdio` = local, `SSE` = remote (requires auth)
 
 ---
 
-## Common Trap on the Exam
+## Common Exam Traps
 
-> "A company wants to give all 50 developers access to a shared internal database tool via MCP. Which transport should they use?"
-
-Answer: **SSE** — it's a shared service with multiple clients. stdio only supports one client per process instance and requires local installation on every machine.
+- Using `tool_choice: "auto"` when structured output is required
+- Assigning 15+ tools expecting reliable selection
+- Generic tools enabling unintended agent behaviors
+- Routing simple lookups through coordinators unnecessarily

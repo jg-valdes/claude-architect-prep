@@ -4,131 +4,83 @@
 
 ---
 
-## Why Tool Schema Design Matters
+## Why Descriptions Are Critical
 
-Claude decides **when** to call a tool and **what arguments to pass** based entirely on:
-1. The tool's **name**
-2. The tool's **description**
-3. The tool's **input schema**
+**Tool descriptions are the primary mechanism LLMs use for tool selection.**
 
-A poorly designed schema leads to Claude calling the wrong tool, passing wrong arguments, or not calling a tool when it should. Good schema design is the primary lever for tool reliability.
+They are not optional metadata — they directly determine whether models route queries correctly. A vague description like "Retrieves customer information" creates ambiguity that leads to misrouting.
 
 ---
 
-## Anatomy of a Tool Definition
+## Five Essential Elements
 
-```json
-{
-  "name": "get_customer_orders",
-  "description": "Retrieve all orders for a specific customer. Use this when you need to look up order history, check order status, or find a specific order for a customer.",
-  "inputSchema": {
-    "type": "object",
-    "properties": {
-      "customer_id": {
-        "type": "string",
-        "description": "The unique customer identifier (e.g. 'CUST-12345')"
-      },
-      "status": {
-        "type": "string",
-        "enum": ["pending", "shipped", "delivered", "cancelled"],
-        "description": "Filter orders by status. Omit to return all orders."
-      },
-      "limit": {
-        "type": "integer",
-        "description": "Maximum number of orders to return. Defaults to 20.",
-        "default": 20,
-        "minimum": 1,
-        "maximum": 100
-      }
-    },
-    "required": ["customer_id"]
-  }
-}
-```
+Production-grade tool descriptions must include:
+
+1. **Primary purpose** — unambiguous statement of what the tool does
+2. **Input specifications** — data types, formats, constraints, required vs. optional fields
+3. **Concrete use cases** — example queries showing the tool's intended scope
+4. **Limitations and edge cases** — explicit boundaries and failure modes
+5. **Tool differentiation** — clear statements about when to use THIS tool vs. similar alternatives
 
 ---
 
-## Rules for Good Tool Descriptions
+## The Misrouting Problem
 
-### Be specific about when to use the tool
-```
-Bad:  "Gets customer data"
-Good: "Retrieve all orders for a specific customer. Use when you need 
-       order history, order status, or to find a specific order."
-```
+Minimal descriptions create ambiguity when multiple tools have overlapping purposes.
 
-### Distinguish between similar tools
-If you have `search_products` and `get_product_by_id`, make their descriptions clearly different:
-```
-search_products:    "Search products by keyword, category, or price range.
-                     Use when you don't have a specific product ID."
+### Problem-Solving Hierarchy (low → high effort)
 
-get_product_by_id:  "Retrieve a single product by its exact ID.
-                     Use when you have a product ID and need full details."
-```
+1. ✅ **Expand descriptions** (correct first step)
+2. ✗ Few-shot examples (adds overhead without fixing root cause)
+3. ✗ Routing classifiers (over-engineered)
+4. ✗ Tool consolidation (valid long-term but premature)
 
-### Include format hints in parameter descriptions
-```
-Bad:  "customer_id": { "description": "The customer ID" }
-Good: "customer_id": { "description": "The unique customer identifier (e.g. 'CUST-12345')" }
-```
+**Always improve descriptions before attempting infrastructure changes.**
 
 ---
 
-## Input Schema Best Practices
+## Tool Splitting Strategy
 
-### Mark required vs optional fields correctly
-- `"required": ["field1", "field2"]` — only include truly mandatory fields
-- Optional fields should have sensible defaults
+Generic tools should split into purpose-specific ones:
 
-### Use enums for constrained values
-```json
-"status": {
-  "type": "string",
-  "enum": ["active", "inactive", "pending"]
-}
 ```
-This prevents Claude from passing invalid values and helps it understand the valid options.
-
-### Use specific types, not just `string`
-```
-Bad:  "amount": { "type": "string" }
-Good: "amount": { "type": "number", "minimum": 0 }
+analyze_document  →  extract_document_data
+                     summarize_document
+                     verify_document_claims
 ```
 
-### Avoid overly broad tools
-A tool that does 5 different things based on a `mode` parameter is hard for Claude to use correctly. Split it into 5 focused tools.
+Each focused tool gets a clear description that prevents misrouting.
 
 ---
 
-## Tool Boundary Design
+## Schema Design Best Practices
 
-**One tool = one responsibility.** Each tool should do exactly one thing clearly.
+- Make fields **optional/nullable** when source documents may lack information — prevents hallucination by allowing honest `null` responses
+- Use **enum values** like `"unclear"` for ambiguous cases
+- Provide an `"other"` + detail string for edge cases
+- Include format normalization instructions in prompts
 
-```
-Bad:  manage_user(action: "create" | "update" | "delete", ...)
-Good: create_user(...), update_user(...), delete_user(...)
-```
+---
 
-Benefits:
-- Claude knows exactly which tool to call for each task
-- Each tool's schema can be optimized for its specific inputs
-- Easier to add permissions/restrictions per tool
+## Exam Tip: Check System Prompt Conflicts
+
+System prompts can contain keywords that override well-written tool descriptions. Always audit system prompts for conflicts when tool selection is unreliable.
 
 ---
 
 ## Key Exam Points
 
-- **Tool descriptions drive Claude's behavior** — they matter more than the code behind the tool
-- **Required fields** should only include what's truly mandatory — optional fields with defaults are better UX
-- **Enums** constrain inputs and help Claude understand valid values
-- **One tool, one responsibility** — avoid multi-mode tools
-- **Distinguish similar tools clearly** in their descriptions — Claude picks based on description, not implementation
+- Tool descriptions = **primary** selection mechanism, not optional metadata
+- **Improve descriptions first** before adding routing infrastructure
+- Tool splitting: one tool, one clear responsibility
+- Optional/nullable fields prevent hallucination on missing data
+- System prompt conflicts can override good descriptions — check both
 
 ---
 
-## Common Trap on the Exam
+## Common Exam Traps
 
-> "Claude keeps passing invalid status values to a tool. What is the most effective fix?"
-
-Answer: Add an **enum** constraint to the `status` field in the input schema — `"enum": ["active", "inactive", "pending"]`. This both prevents invalid values and explicitly tells Claude what values are valid. Fixing it only in the description is less reliable.
+- Choosing few-shot examples or routing classifiers as the first fix for misrouting
+- Assuming well-written descriptions are sufficient without checking system prompt conflicts
+- Keeping generic tools and expecting descriptions to handle all cases
+- Making all schema fields required, which pressures the model to hallucinate values

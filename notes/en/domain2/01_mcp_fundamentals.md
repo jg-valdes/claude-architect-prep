@@ -6,85 +6,111 @@
 
 ## What Is MCP?
 
-**Model Context Protocol (MCP)** is an open protocol that standardizes how AI models connect to external tools, data sources, and services. Think of it as a universal adapter — instead of building a custom integration for every tool, you build one MCP server and any MCP-compatible client (like Claude) can use it.
-
-```
-Claude (MCP Client) ←→ MCP Protocol ←→ MCP Server ←→ External Tool/Data
-```
+The Model Context Protocol (MCP) extends Claude's capabilities by connecting it to external systems — databases, APIs, development tools. It defines a standard way to expose tools, resources, and prompts to Claude.
 
 ---
 
-## Core Concepts
+## Structured Error Responses
 
-### MCP Server
-- Exposes **tools**, **resources**, and **prompts** to the client
-- Runs as a separate process (local) or remote service
-- Defines what capabilities are available and how to call them
-- Is responsible for actually executing the tool logic
+When MCP tools fail, structured error responses enable agents to recover intelligently. The MCP protocol's `isError` flag signals failures.
 
-### MCP Client
-- The AI model (Claude) or the host application
-- Discovers available tools from the server
-- Calls tools by sending structured requests
-- Receives structured responses
+### Four Error Categories
 
-### Tools
-Functions the model can call. Defined with a name, description, and input schema:
+| Category | Description | `isRetryable` | Recovery |
+|---|---|---|---|
+| **Transient** | Timeout, rate limit, service unavailable | `true` | Retry with backoff |
+| **Validation** | Malformed request, invalid format, missing fields | `true` | Fix input and retry |
+| **Business** | Policy violation, rule conflict (valid request, wrong constraint) | `false` | Escalate or use alternative workflow |
+| **Permission** | Access denied, insufficient credentials | `false` | Escalate or obtain different credentials |
+
+**Critical:** Business errors have `isRetryable: false` — retrying produces identical failures.
+
+---
+
+## Access Failure vs. Valid Empty Result
+
+| Situation | `isError` | `resultCount` | Action |
+|---|---|---|---|
+| Tool cannot reach data source (timeout, auth failure) | `true` | — | Consider retry |
+| Tool executed successfully, found no matches | `false` | `0` | No retry — this IS the answer |
+
+This distinction **prevents wasted retries**. Never retry a valid empty result.
+
+---
+
+## MCP Server Configuration
+
+### Scoping Hierarchy
+
+| File | Scope | Version-Controlled? |
+|---|---|---|
+| `.mcp.json` (project root) | Whole team | Yes — shared via git |
+| `~/.claude.json` | Personal | No — local only |
+
+**Key principle:** All tools from all configured servers (both project and user level) are discovered at connection time and available simultaneously.
+
+### Environment Variable Expansion
+
+`.mcp.json` supports `${VARIABLE_NAME}` syntax to keep credentials out of version control:
 
 ```json
 {
-  "name": "search_database",
-  "description": "Search the product database by keyword",
-  "inputSchema": {
-    "type": "object",
-    "properties": {
-      "query": { "type": "string", "description": "Search keyword" },
-      "limit": { "type": "integer", "description": "Max results", "default": 10 }
-    },
-    "required": ["query"]
+  "mcpServers": {
+    "jira": {
+      "command": "npx",
+      "args": ["@company/mcp-jira", "--token", "${JIRA_TOKEN}"]
+    }
   }
 }
 ```
 
-### Resources
-Static or dynamic data the server exposes (files, database records, API responses). Resources are read-only — unlike tools, they don't perform actions.
-
-### Prompts
-Reusable prompt templates the server exposes to the client. Less common in practice.
+Each developer sets their own tokens locally.
 
 ---
 
-## The Two Transports
+## MCP Resources
 
-MCP supports two transport mechanisms:
+Resources expose content catalogs to agents **without requiring exploratory tool calls**:
+- Issue summaries with titles and statuses
+- Documentation hierarchies
+- Database schemas with table names and relationships
 
-### stdio (Standard I/O)
-- Client and server communicate via stdin/stdout
-- Server runs as a **local subprocess**
-- Simple to set up — no networking required
-- Best for local tools (file system access, local databases, CLI tools)
+Resources reduce unnecessary queries by making information immediately available.
 
-### SSE (Server-Sent Events)
-- Client and server communicate over **HTTP**
-- Server runs as a **remote service**
-- Supports multiple simultaneous clients
-- Requires network — introduces latency and auth concerns
-- Best for shared services, remote APIs, cloud tools
+---
+
+## Build vs. Use Decision
+
+**Use community servers for:**
+- Standard integrations (Jira, GitHub, Slack, Notion)
+- Tested solutions requiring minimal maintenance
+
+**Build custom servers only when:**
+- Team has specific workflows community servers can't handle
+- Custom business logic is needed in the tool layer
+- Integration with proprietary internal systems
+
+---
+
+## Enhancing MCP Tool Descriptions
+
+Sparse descriptions cause agents to prefer built-in tools with richer documentation. Enhanced descriptions should be **3–5 sentences** explaining capabilities, outputs, use cases, and comparisons to alternatives.
 
 ---
 
 ## Key Exam Points
 
-- MCP is a **protocol**, not a library — it defines the communication standard
-- **Tools** perform actions; **resources** expose data read-only
-- **stdio** = local subprocess; **SSE** = remote HTTP service
-- The **tool description** is critical — Claude uses it to decide when and how to call the tool
-- MCP servers are **language-agnostic** — can be written in Python, TypeScript, Go, etc.
+- Team-wide config → `.mcp.json` (project root, version-controlled)
+- Personal/experimental config → `~/.claude.json` (never committed)
+- Business errors are **not retryable** — this is frequently tested
+- Valid empty result ≠ access failure — know the difference
+- Always evaluate community MCP servers before building custom ones
+- Commit `.mcp.json` with env var references, never raw credentials
 
 ---
 
-## Common Trap on the Exam
+## Common Exam Trap
 
-> "What is the primary purpose of MCP?"
+> "Should the Jira MCP config go in `.mcp.json` or `~/.claude.json`?"
 
-Answer: To provide a **standardized protocol** for connecting AI models to external tools and data sources — not to improve model performance, not to add memory, not to enable multi-agent systems (though it can support those use cases).
+Answer: `.mcp.json` in the project root — it's team-wide and should be version-controlled. `~/.claude.json` is for personal/experimental servers only.
