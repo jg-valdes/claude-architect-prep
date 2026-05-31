@@ -1,88 +1,98 @@
-# Custom Slash Commands
+# Custom Slash Commands & Skills
 
 **Exam weight:** Part of Domain 3 – Claude Code Configuration & Workflows (20%)
 
 ---
 
-## What Are Custom Slash Commands?
+## Creating Custom Commands
 
-Custom slash commands let you save reusable prompts as files that can be invoked with `/command-name` in Claude Code. They're useful for repetitive tasks like running deployments, generating PR descriptions, or running code reviews.
+Commands created in `.claude/skills/` or `.claude/commands/` produce identical `/commands` that developers can invoke. Both directory names work.
 
----
+### Scoping Levels
 
-## File Structure
-
-Commands are stored as Markdown files:
-
-```
-.claude/commands/           ← Project-level commands (shared with team)
-  deploy.md                 → /deploy
-  run-tests.md              → /run-tests
-  review-pr.md              → /review-pr
-
-~/.claude/commands/         ← Global commands (personal, all projects)
-  my-template.md            → /my-template
-```
-
-**Naming rule:** The filename (without `.md`) becomes the slash command name.
-
----
-
-## Command File Format
-
-A command file is just a Markdown file containing the prompt Claude will execute:
-
-```markdown
-# Deploy to Environment
-
-Deploy the current branch to $ARGUMENTS. Before deploying:
-1. Run `npm run build` and confirm it passes
-2. Run `npm test` and confirm all tests pass
-3. Show me the git diff against main
-4. Ask for confirmation before proceeding
-```
-
-Invoked as: `/deploy staging` or `/deploy production`
-
----
-
-## Using `$ARGUMENTS`
-
-`$ARGUMENTS` is a special placeholder that captures everything typed after the command name.
-
-```bash
-/deploy staging       → $ARGUMENTS = "staging"
-/review-pr 42         → $ARGUMENTS = "42"
-/generate-test utils  → $ARGUMENTS = "utils"
-```
-
-If no arguments are passed, `$ARGUMENTS` is an empty string.
-
----
-
-## Scope: Project vs Global
-
-| Location | Scope | Use case |
+| Location | Scope | Version-Controlled? |
 |---|---|---|
-| `.claude/commands/` | Project only | Team-shared workflows, repo-specific tasks |
-| `~/.claude/commands/` | All projects | Personal productivity commands |
+| `.claude/skills/` or `.claude/commands/` | Project — all team members | Yes |
+| `~/.claude/skills/` or `~/.claude/commands/` | Personal — not shared | No |
 
-Project commands take precedence over global if names conflict.
+---
+
+## Three Critical Frontmatter Options
+
+```yaml
+---
+context: fork
+allowed-tools: Read, Grep
+argument-hint: "filename to analyze"
+---
+```
+
+| Option | Effect |
+|---|---|
+| `context: fork` | Runs skill in isolated sub-agent context — verbose output doesn't clutter main conversation |
+| `allowed-tools` | Restricts which tools the skill can use (security boundary) |
+| `argument-hint` | Prompts the developer for required parameters when invoked without arguments |
+
+---
+
+## Skills vs. CLAUDE.md
+
+| Skills | CLAUDE.md |
+|---|---|
+| On-demand, task-specific workflows | Always-loaded, universal standards |
+| Loaded only when invoked | Applied to every session |
+| Use for: "run a review", "generate a report" | Use for: naming conventions, error handling standards |
+
+**Anti-pattern:** Placing task-specific procedures in CLAUDE.md.
+
+---
+
+## Path-Specific Rules (`.claude/rules/`)
+
+Rule files use YAML frontmatter with a `paths` field specifying which files trigger loading:
+
+```yaml
+---
+paths: ["terraform/**/*"]
+---
+# Terraform Conventions
+- Use snake_case for resource names
+- Tag every resource with environment and team labels
+```
+
+**Key advantage:** Glob patterns like `**/*.test.tsx` catch test files across the entire codebase, regardless of directory depth.
+
+### When to Use Each Approach
+
+| Scenario | Best Approach |
+|---|---|
+| Universal team standards | Root CLAUDE.md |
+| Single package directory | Directory-level CLAUDE.md |
+| File type across many directories | Path-specific rules with glob patterns |
+| On-demand task workflows | Skills in `.claude/skills/` |
+
+---
+
+## Token Efficiency
+
+Path-scoped rules load **only when editing matching files**. Root CLAUDE.md loads for every session. For large projects with multiple convention categories, path-scoped rules preserve token budget.
 
 ---
 
 ## Key Exam Points
 
-- Commands are just **Markdown files** — no special syntax beyond `$ARGUMENTS`
-- They execute as **prompts** — Claude reads the file content and acts on it
-- `.claude/commands/` should be **checked into version control** for team sharing
-- `~/.claude/commands/` is **personal** and not shared
-- The command name comes from the **filename**, not from content inside the file
+- Project-scoped commands → `.claude/skills/` (shared via git)
+- Personal commands → `~/.claude/skills/` (not version-controlled)
+- `context: fork` prevents verbose skill output from polluting main conversation
+- Skills are **on-demand**; CLAUDE.md is **always-on**
+- Path-specific rules in `.claude/rules/` with `paths` frontmatter = file-type conventions
 
 ---
 
-## Common Trap on the Exam
+## Common Exam Traps
 
-> "Where should you put a slash command that all team members should have access to?"
-
-Answer: `.claude/commands/` (project-level, checked into the repo) — **not** `~/.claude/commands/` which is personal/global.
+- Confusing user-scoped paths (`~/.claude/`) with project-scoped (`.claude/`) for team commands
+- Treating skills as always-on guidance like CLAUDE.md
+- Forgetting `context: fork` for verbose outputs
+- Placing task-specific workflows in CLAUDE.md instead of skills
+- Choosing directory-level CLAUDE.md over path-specific rules when conventions apply across 50+ locations

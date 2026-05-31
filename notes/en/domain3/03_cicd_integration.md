@@ -4,98 +4,90 @@
 
 ---
 
-## Non-Interactive Mode
+## The `-p` / `--print` Flag
 
-Claude Code is designed to run in automated pipelines. The key is using **non-interactive mode** so it doesn't prompt for input or show a UI.
+**The single most directly testable fact in Domain 3.**
+
+Without `-p`, Claude Code hangs in CI pipelines waiting for keyboard input. The flag enables non-interactive execution — processes the prompt and exits automatically.
 
 ```bash
-claude --print "review this PR for security issues"
-claude -p "generate a test for the function in src/utils.ts"
+claude -p "Review these changes for security issues" --output-format json
 ```
-
-`--print` (or `-p`) tells Claude to:
-- Output the result to stdout
-- Exit immediately when done
-- Never ask for user input
 
 ---
 
-## Key CLI Flags for CI/CD
+## Structured Output Flags
+
+Two flags work together for machine-parseable output:
 
 | Flag | Purpose |
 |---|---|
-| `--print` / `-p` | Non-interactive mode, output to stdout |
-| `--model` | Specify which model to use (e.g. `claude-opus-4-7`) |
-| `--allowedTools` | Whitelist specific tools Claude can use |
-| `--system-prompt` | Override the system prompt |
-| `--no-interactive` | Same effect as `--print` |
+| `--output-format json` | Emit JSON instead of prose |
+| `--json-schema <file>` | Validate output against a schema |
 
-### Example: Restricting tools in CI
-```bash
-claude -p "review the diff for bugs" \
-  --allowedTools "Read,Bash(git diff)" \
-  --model claude-sonnet-4-6
-```
+These enable automated systems to:
+- Post inline PR comments
+- Filter findings by severity
+- Track issues across runs
 
 ---
 
-## Common CI/CD Use Cases
+## Session Context Isolation
 
-### Automated PR review
-```yaml
-# GitHub Actions example
-- name: Claude Code Review
-  run: |
-    claude -p "Review the git diff for bugs and security issues. 
-    Output a markdown summary." \
-    --allowedTools "Read,Bash(git *)"
-```
+> "The same Claude session that generated code is less effective at reviewing its own changes."
 
-### Test generation on commit
-```bash
-claude -p "Generate unit tests for any new functions added in the last commit" \
-  --allowedTools "Read,Write,Bash(git show HEAD)"
-```
+The session retains reasoning context from code generation — leading to confirmation bias in review. Independent review instances evaluate code **without prior justification bias**.
 
-### Automated documentation
-```bash
-claude -p "Update CHANGELOG.md based on commits since last tag" \
-  --allowedTools "Read,Write,Bash(git log *)"
-```
+**Correct approach:** Launch separate Claude Code instances for generation and review.
 
 ---
 
-## Settings for CI Environments
+## Incremental Review Context
 
-In CI you typically want to pre-approve tools so Claude doesn't pause waiting for permission. Use `settings.json`:
+Automated reviews should track previous findings and report **only new or unaddressed issues**.
 
-```json
-{
-  "permissions": {
-    "allow": [
-      "Read",
-      "Bash(git *)",
-      "Bash(npm run *)"
-    ]
-  }
-}
-```
+Without this: duplicate comments appear on every push, eroding developer trust.
 
-Or pass `--allowedTools` inline to keep it explicit per-command.
+---
+
+## CLAUDE.md for CI
+
+Project context files provide CI-invoked Claude Code with:
+- Testing standards and available fixtures
+- Review criteria and focus areas
+- Existing test coverage information
+
+This prevents low-value boilerplate generation in automated contexts.
+
+---
+
+## Synchronous API vs. Batch API
+
+| Use Case | API | Latency |
+|---|---|---|
+| Pre-merge checks (developers wait) | Synchronous | Real-time |
+| Overnight reports, weekly audits | Batch API | Up to 24 hours |
+| Agentic workflows with tool calls | Synchronous | N/A (Batch can't do this) |
+
+**Batch API savings:** 50% cost reduction — but use only for latency-tolerant workflows.
+
+**Critical:** The Batch API cannot support multi-turn tool calling within a single request.
 
 ---
 
 ## Key Exam Points
 
-- `--print` / `-p` is **required** for non-interactive/CI use — without it Claude will open the interactive UI
-- `--allowedTools` is the correct way to **restrict tool access** in automated contexts
-- Claude Code can be used in **any CI system** (GitHub Actions, GitLab CI, Jenkins, etc.) — it's just a CLI
-- Always restrict tools to the **minimum needed** for the task (principle of least privilege)
+- `-p` flag = non-interactive mode — **required** for all CI usage
+- `--output-format json` + `--json-schema` = machine-parseable output
+- Self-review (same session) < independent instance review
+- Batch API = 50% cheaper but up to 24h latency and **no** tool calling
+- Batch API is **wrong** for blocking pre-merge workflows
 
 ---
 
-## Common Trap on the Exam
+## Common Exam Traps
 
-> "You want Claude Code to run in a GitHub Actions pipeline without user interaction. Which flag is required?"
-
-Answer: `--print` (or `-p`). Without it, Claude Code enters interactive mode and the pipeline will hang.
+- Fixing a hanging CI job with environment variables or stdin redirection (it's the missing `-p` flag)
+- Assuming the same session reviews its own output as effectively as an independent instance
+- Using the Batch API for pre-merge checks where developers are waiting
+- Not tracking previous findings, causing duplicate comments on every push

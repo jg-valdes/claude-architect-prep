@@ -1,103 +1,107 @@
-# Permissions Model
+# Permissions Model & Plan Mode
 
 **Exam weight:** Part of Domain 3 – Claude Code Configuration & Workflows (20%)
 
 ---
 
-## What Is the Permissions Model?
+## Permissions Model
 
-Claude Code asks for user approval before running potentially risky tools. The permissions model lets you pre-approve (allow) or block (deny) specific tools and commands so Claude doesn't pause to ask every time.
+Permissions control which tools Claude Code can use. They are configured in `settings.json`.
 
----
-
-## Configuration
-
-Permissions live in `settings.json`:
+### Allow vs. Deny
 
 ```json
 {
   "permissions": {
-    "allow": [
-      "Read",
-      "Edit",
-      "Write",
-      "Bash(npm run *)",
-      "Bash(git *)"
-    ],
-    "deny": [
-      "Bash(rm -rf *)",
-      "Bash(git push --force *)"
-    ]
+    "allow": ["Bash(git *)", "Read", "Write"],
+    "deny": ["Bash(rm *)", "Bash(sudo *)"]
   }
 }
 ```
 
----
+**Precedence:** `deny` rules take priority over `allow` rules when they overlap.
 
-## Glob Pattern Syntax
+### `--allowedTools` Flag
 
-For `Bash` commands, you can match specific commands with globs:
+Passed at invocation time to limit tools for that session:
 
-```
-"Bash(npm *)"          → any npm command
-"Bash(npm run *)"      → only npm run commands
-"Bash(git diff)"       → only exactly `git diff`
-"Bash(git *)"          → any git command
-"Read"                 → allow Read tool (no glob needed for non-Bash tools)
+```bash
+claude --allowedTools "Read,Grep,Bash(git log *)" -p "Summarize recent changes"
 ```
 
----
-
-## Permission Resolution Order
-
-When Claude wants to use a tool:
-
-1. Check **deny** list — if matched, **block** (deny always wins)
-2. Check **allow** list — if matched, **allow without prompting**
-3. Neither matched → **prompt the user**
-
-**Deny takes priority over allow** — if a command matches both, it's denied.
+Acts as an **allowlist** — only the listed tools are available. All others are implicitly denied.
 
 ---
 
-## Settings File Scope
+## Plan Mode vs. Direct Execution
 
-| File | Scope | Version controlled? |
-|---|---|---|
-| `~/.claude/settings.json` | Global (all projects) | No |
-| `.claude/settings.json` | Project (shared) | Yes |
-| `.claude/settings.local.json` | Local override (personal) | No |
+### The Core Distinction
 
-**Priority:** local > project > global
+**The decision is not about difficulty — it's about ambiguity.**
+
+A difficult but well-defined bug fix (clear stack trace, single function, known cause) → **direct execution**.
+
+A straightforward-seeming but ambiguous multi-file restructuring → **plan mode**.
 
 ---
 
-## Tool Names Reference
+### When to Use Plan Mode
 
-| Tool | What it does |
+- Large-scale architectural changes (monolith restructuring, module reorganization)
+- Tasks with multiple valid implementation approaches
+- Multi-file modifications (45+ files) needing consistent strategy
+- Codebase exploration necessary before changes
+- Situations where architectural decisions have downstream consequences
+
+> Plan mode enables safe exploration and design. Claude reads the codebase, analyses dependencies, and proposes an approach — **all without modifying any files**.
+
+---
+
+### When to Use Direct Execution
+
+- Well-scoped changes with clear stack traces
+- The correct approach is already known
+- Limited-scope modifications (single function, one file)
+
+---
+
+### The Hybrid Pattern (Plan-Then-Execute)
+
+1. Explore and design in plan mode
+2. Implement using direct execution with strategy already determined
+
+---
+
+### The Explore Subagent
+
+Isolates verbose discovery output, keeping the main conversation context clean for focused implementation work.
+
+---
+
+## Decision Framework
+
+| Task Type | Recommended Mode |
 |---|---|
-| `Read` | Read files |
-| `Edit` | Edit files (diff-based) |
-| `Write` | Write/create files |
-| `Bash` | Run shell commands |
-| `WebSearch` | Search the web |
-| `WebFetch` | Fetch a URL |
-| `Agent` | Spawn subagents |
+| Architectural restructuring | Plan mode |
+| Library migration (many files) | Plan mode, then direct |
+| Single-file bug fix (clear stack trace) | Direct execution |
+| Unknown codebase, open-ended task | Plan mode |
 
 ---
 
 ## Key Exam Points
 
-- **Deny always wins** — if a command is in both allow and deny, it's denied
-- Permissions are **additive across levels** — project adds to global, local adds to project
-- `Bash(npm *)` and `Bash(npm run *)` are **different** — the second is more restrictive
-- Without any allow rules, Claude prompts for permission on every tool use
-- In CI/CD, use `--allowedTools` flag instead of settings.json for per-command control
+- `deny` rules take priority over `allow` rules
+- `--allowedTools` is an **allowlist** at invocation time
+- Plan vs. direct = **ambiguity**, not difficulty
+- Plan mode → no file modifications — safe exploration only
+- Hybrid pattern: plan → direct is the production best practice
 
 ---
 
-## Common Trap on the Exam
+## Common Exam Traps
 
-> "A project settings.json has `"allow": ["Bash(git *)"]` and the global settings.json has `"deny": ["Bash(git push *)"]`. What happens when Claude tries to run `git push`?"
-
-Answer: **Denied.** Deny rules take priority over allow rules, and all levels are combined — the global deny blocks the project allow.
+- Defaulting to direct execution for multi-file architectural changes (needs plan mode)
+- Over-planning simple, single-file fixes with clear requirements
+- Missing the hybrid plan-then-execute pattern
+- Treating task difficulty as the deciding factor (it's ambiguity that matters)
