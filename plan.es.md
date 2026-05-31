@@ -41,6 +41,7 @@ Las notas y los quizzes juntos cubren los 5 dominios del examen con el mismo est
   - [ ] `notes/es/domain3/03_integracion_cicd.md`
   - [ ] `notes/es/domain3/04_hooks.md`
   - [ ] `notes/es/domain3/05_modelo_permisos.md`
+  - [ ] `notes/es/domain3/06_refinamiento_iterativo.md`
 - [ ] Sesión de quiz con Claude sobre los temas del Dominio 3
 
 ## Día 2: Arquitectura — Dominios 1 y 5
@@ -51,9 +52,15 @@ Las notas y los quizzes juntos cubren los 5 dominios del examen con el mismo est
   - [ ] `notes/es/domain1/03_bucles_agentes.md`
   - [ ] `notes/es/domain1/04_coordinacion_subagentes.md`
   - [ ] `notes/es/domain1/05_patrones_fiabilidad.md`
+  - [ ] `notes/es/domain1/06_hooks_sdk_agente.md`
+  - [ ] `notes/es/domain1/07_estado_sesion_reanudacion.md`
 - [ ] Estudia el Dominio 5 – Gestión de Contexto y Fiabilidad
   - [ ] `notes/es/domain5/01_gestion_ventana_contexto.md`
   - [ ] `notes/es/domain5/02_fiabilidad_tareas_largas.md`
+  - [ ] `notes/es/domain5/03_escalacion_ambiguedad.md`
+  - [ ] `notes/es/domain5/04_propagacion_errores.md`
+  - [ ] `notes/es/domain5/05_revision_humana_calibracion.md`
+  - [ ] `notes/es/domain5/06_procedencia_informacion.md`
 - [ ] Sesión de quiz con Claude sobre los temas de los Dominios 1 y 5
 
 ## Día 3: MCP y Prompts — Dominios 2 y 4
@@ -62,9 +69,13 @@ Las notas y los quizzes juntos cubren los 5 dominios del examen con el mismo est
   - [ ] `notes/es/domain2/01_fundamentos_mcp.md`
   - [ ] `notes/es/domain2/02_stdio_vs_sse.md`
   - [ ] `notes/es/domain2/03_diseno_esquema_herramientas.md`
+  - [ ] `notes/es/domain2/04_manejo_errores_herramientas.md`
+  - [ ] `notes/es/domain2/05_herramientas_integradas.md`
 - [ ] Estudia el Dominio 4 – Ingeniería de Prompts y Salida Estructurada
   - [ ] `notes/es/domain4/01_ingenieria_prompts.md`
   - [ ] `notes/es/domain4/02_patrones_salida_estructurada.md`
+  - [ ] `notes/es/domain4/03_prompts_pocos_ejemplos.md`
+  - [ ] `notes/es/domain4/04_procesamiento_por_lotes.md`
 - [ ] Sesión de quiz con Claude sobre los temas de los Dominios 2 y 4
 
 ## Día 4: Exámenes de Práctica
@@ -152,6 +163,7 @@ Las notas y los quizzes juntos cubren los 5 dominios del examen con el mismo est
 
 | Recurso | Tipo | Costo |
 |---|---|---|
+| [claudecertificationguide.com/learn](https://claudecertificationguide.com/learn) | **Fuente principal de notas** — 30 páginas de declaraciones de tareas, los 5 dominios | Gratis |
 | [Anthropic Academy – Claude Code en Acción](https://anthropic.skilljar.com/claude-code-in-action) | Curso oficial | Gratis |
 | [Guía de Estudio CCA-F – Tutorials Dojo](https://tutorialsdojo.com/cca-f-claude-certified-architect-foundations-study-guide/) | Guía de estudio | Gratis |
 | [claudecertifications.com](https://claudecertifications.com/) | Preguntas de práctica | Gratis |
