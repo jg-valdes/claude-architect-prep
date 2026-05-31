@@ -12,11 +12,12 @@ This repo gives you structured notes for all 5 exam domains and an AI coach that
 |---|---|
 | `CLAUDE.md` | Study coach instructions — tells Claude how to guide you |
 | `plan.md` | 6-day study plan with checkboxes for progress tracking |
-| `notes/domain1/` | Agentic Architecture & Orchestration (27%) |
-| `notes/domain2/` | Tool Design & MCP Integration (18%) |
-| `notes/domain3/` | Claude Code Configuration & Workflows (20%) |
-| `notes/domain4/` | Prompt Engineering & Structured Output (20%) |
-| `notes/domain5/` | Context Management & Reliability (15%) |
+| `notes/en/domain1/` | Agentic Architecture & Orchestration (27%) — 7 files |
+| `notes/en/domain2/` | Tool Design & MCP Integration (18%) — 5 files |
+| `notes/en/domain3/` | Claude Code Configuration & Workflows (20%) — 6 files |
+| `notes/en/domain4/` | Prompt Engineering & Structured Output (20%) — 4 files |
+| `notes/en/domain5/` | Context Management & Reliability (15%) — 6 files |
+| `notes/es/` | Spanish translations of all notes |
 
 ---
 
@@ -99,6 +100,7 @@ You can pause and resume any time. Claude always reads `plan.md` to find your cu
 
 | Resource | Type | Cost |
 |---|---|---|
+| [claudecertificationguide.com/learn](https://claudecertificationguide.com/learn) | **Primary notes source** — 30 task-statement pages, all 5 domains | Free |
 | [Anthropic Academy – Claude Code in Action](https://anthropic.skilljar.com/claude-code-in-action) | Official course | Free |
 | [Tutorials Dojo CCA-F Study Guide](https://tutorialsdojo.com/cca-f-claude-certified-architect-foundations-study-guide/) | Study guide | Free |
 | [claudecertifications.com](https://claudecertifications.com/) | Practice questions | Free |

@@ -41,6 +41,7 @@ The notes and quizzes together cover all 5 exam domains with the same question s
   - [ ] `notes/en/domain3/03_cicd_integration.md`
   - [ ] `notes/en/domain3/04_hooks.md`
   - [ ] `notes/en/domain3/05_permissions_model.md`
+  - [ ] `notes/en/domain3/06_iterative_refinement.md`
 - [ ] Quiz session with Claude on Domain 3 topics
 
 ## Day 2: Architecture — Domains 1 & 5
@@ -51,9 +52,15 @@ The notes and quizzes together cover all 5 exam domains with the same question s
   - [ ] `notes/en/domain1/03_agentic_loops.md`
   - [ ] `notes/en/domain1/04_subagent_coordination.md`
   - [ ] `notes/en/domain1/05_reliability_patterns.md`
+  - [ ] `notes/en/domain1/06_agent_sdk_hooks.md`
+  - [ ] `notes/en/domain1/07_session_state_resumption.md`
 - [ ] Study Domain 5 – Context Management & Reliability
   - [ ] `notes/en/domain5/01_context_window_management.md`
   - [ ] `notes/en/domain5/02_long_running_task_reliability.md`
+  - [ ] `notes/en/domain5/03_escalation_ambiguity.md`
+  - [ ] `notes/en/domain5/04_error_propagation.md`
+  - [ ] `notes/en/domain5/05_human_review_calibration.md`
+  - [ ] `notes/en/domain5/06_information_provenance.md`
 - [ ] Quiz session with Claude on Domain 1 & 5 topics
 
 ## Day 3: MCP & Prompting — Domains 2 & 4
@@ -62,9 +69,13 @@ The notes and quizzes together cover all 5 exam domains with the same question s
   - [ ] `notes/en/domain2/01_mcp_fundamentals.md`
   - [ ] `notes/en/domain2/02_stdio_vs_sse.md`
   - [ ] `notes/en/domain2/03_tool_schema_design.md`
+  - [ ] `notes/en/domain2/04_tool_error_handling.md`
+  - [ ] `notes/en/domain2/05_builtin_tools.md`
 - [ ] Study Domain 4 – Prompt Engineering & Structured Output
   - [ ] `notes/en/domain4/01_prompt_engineering.md`
   - [ ] `notes/en/domain4/02_structured_output_patterns.md`
+  - [ ] `notes/en/domain4/03_few_shot_prompting.md`
+  - [ ] `notes/en/domain4/04_batch_processing.md`
 - [ ] Quiz session with Claude on Domain 2 & 4 topics
 
 ## Day 4: Practice Exams
@@ -152,6 +163,7 @@ The notes and quizzes together cover all 5 exam domains with the same question s
 
 | Resource | Type | Cost |
 |---|---|---|
+| [claudecertificationguide.com/learn](https://claudecertificationguide.com/learn) | **Primary notes source** — 30 task-statement pages covering all 5 domains | Free |
 | [Anthropic Academy – Claude Code in Action](https://anthropic.skilljar.com/claude-code-in-action) | Official course | Free |
 | [Tutorials Dojo CCA-F Study Guide](https://tutorialsdojo.com/cca-f-claude-certified-architect-foundations-study-guide/) | Study guide | Free |
 | [claudecertifications.com](https://claudecertifications.com/) | Practice questions | Free |
