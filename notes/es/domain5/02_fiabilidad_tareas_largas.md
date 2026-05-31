@@ -1,138 +1,102 @@
-# Fiabilidad en Tareas de Larga Duración
+# Fiabilidad en Tareas Largas y Degradación de Contexto
 
 **Peso en el examen:** Dominio 5 – Gestión de Contexto y Fiabilidad (15%)
 
 ---
 
-## El Problema con las Tareas Largas
+## Degradación de Contexto (No Agotamiento de Tokens)
 
-Las tareas cortas fallan rara vez y se recuperan fácilmente. Las tareas agénticas de larga duración enfrentan riesgos compuestos:
-- Timeouts de red a mitad de la tarea
-- Llenado de la ventana de contexto
-- Errores en el paso 3 que corrompen los pasos 4–20
-- El modelo desviándose del objetivo original
-- Límites de recursos (límites de tasa, presupuestos de tokens)
+**Definición:** El modelo empieza a referenciar "patrones típicos" en lugar de las clases, métodos y cadenas de dependencias específicas que descubrió antes.
 
-Un buen diseño anticipa estos fallos y los maneja con gracia.
+**Mecanismo:**
+1. Cada paso de exploración produce salida verbosa
+2. La salida se acumula en el contexto de conversación
+3. Los descubrimientos anteriores quedan enterrados bajo la salida verbosa reciente
+4. La atención del modelo se desplaza, perdiendo referencias específicas
 
----
-
-## Patrón 1: Checkpointing
-
-Guarda el estado después de cada paso significativo para poder reanudar sin empezar de cero.
-
-```
-Tarea: Procesar 1,000 registros
-
-Paso 1: Procesar registros 1–100   → guardar progreso: {"ultimo_procesado": 100}
-Paso 2: Procesar registros 101–200 → guardar progreso: {"ultimo_procesado": 200}
-...
-Paso 6: Procesar registros 501–600 → FALLO
-
-Reanudar: leer checkpoint → ultimo_procesado = 500 → comenzar desde 501
-```
-
-**Qué guardar en checkpoints:**
-- Qué elementos se han procesado
-- Resultados intermedios que costaron esfuerzo producir
-- Fase/etapa actual del flujo de trabajo
-
-**Dónde almacenar checkpoints:**
-- Archivos (simple, duradero)
-- Bases de datos (consultable, estructurado)
-- Almacenes clave-valor (rápido, ligero)
+> **La degradación de contexto no es un problema de límite de tokens. Aumentar la ventana de contexto no la soluciona.**
 
 ---
 
-## Patrón 2: Operaciones Idempotentes
+## Cuatro Estrategias de Mitigación
 
-Diseña cada paso para que ejecutarlo dos veces produzca el mismo resultado que ejecutarlo una vez.
+### 1. Archivos Borrador (Scratchpad)
 
+Escribir hallazgos clave en archivos persistentes; referenciarlos para preguntas posteriores.
+
+```markdown
+# exploración-borrador.md
+## Clases Clave
+- OrderProcessor (src/orders/processor.ts) — maneja lógica de reembolsos
+- PaymentGateway (src/payments/gateway.ts) — envuelve SDK de Stripe
+
+## Cadena de Dependencias
+OrderProcessor → PaymentGateway → StripeClient
+
+## Hallazgos Críticos
+- Verificación null faltante en línea 247 (posible NPE)
 ```
-Mal (no idempotente):
-  "Añadir fila a la tabla" → ejecutar dos veces crea filas duplicadas
-
-Bien (idempotente):
-  "Insertar o actualizar fila por ID" → ejecutar dos veces produce la misma fila única
-```
-
-Las operaciones idempotentes hacen que los reintentos sean seguros — siempre puedes reintentar sin preocuparte por efectos secundarios.
 
 ---
 
-## Patrón 3: Seguimiento de Progreso
+### 2. Delegación a Subagentes
 
-Mantén un registro visible de qué se ha hecho, qué está en progreso y qué queda.
+En lugar de un agente explorando todo (llenando su contexto con salida verbosa), delegar tareas específicas a subagentes aislados:
+- Encontrar archivos de prueba y estado de cobertura
+- Rastrear flujos de reembolso a través de sistemas
+- Identificar integraciones de API externas
+
+> "Cada subagente opera con su propio contexto aislado... el contexto del agente principal permanece limpio para coordinación de alto nivel mientras los subagentes manejan la exploración verbosa."
+
+**Comprensión clave:** El valor principal de los subagentes es el **aislamiento**, no la paralelización.
+
+---
+
+### 3. Inyección de Resumen Entre Fases
+
+Cuando la exploración ocurre en fases, resumir los hallazgos de la Fase 1 **antes** de instanciar los subagentes de la Fase 2. Previene la duplicación y asegura que el contexto arquitectural se transfiera.
+
+---
+
+### 4. El Comando `/compact`
+
+El comando `/compact` de Claude Code reduce el uso de contexto resumarizando conversaciones.
+
+**Usar proactivamente** durante sesiones de exploración extendidas — no solo al alcanzar los límites de contexto.
+
+---
+
+## Recuperación de Fallos mediante Manifiestos de Estado
+
+Para sesiones extendidas que pueden fallar o interrumpirse:
 
 ```json
 {
-  "total": 1000,
-  "completados": 547,
-  "en_progreso": 12,
-  "fallidos": 3,
-  "elementos_fallidos": [42, 156, 389],
-  "restantes": 438
+  "id_sesion": "explorar-2024-03-15",
+  "fase_actual": "fase_2_analisis_profundo",
+  "rutas_exploradas": ["src/orders/", "src/payments/"],
+  "hallazgos_clave": ["Verificación null faltante en processor.ts:247"],
+  "preguntas_pendientes": ["¿PaymentGateway reintenta en 429?"]
 }
 ```
 
-El seguimiento de progreso permite:
-- Reanudar desde completación parcial
-- Identificar patrones en los fallos
-- Estimar el tiempo restante
-- Reportar estado a los humanos
+En recuperación: inyectar el manifiesto como contexto, reanudar desde el último checkpoint.
 
 ---
 
-## Patrón 4: Degradación Elegante
+## Puntos Clave del Examen
 
-Cuando una subtarea falla, decide si la tarea general puede continuar sin ella.
-
-```
-Ruta crítica:     Debe tener éxito — abortar si falla
-Paso opcional:    Se puede omitir — continuar con salida reducida
-Paso de mejor esfuerzo: Intentar 3 veces — si todos fallan, registrar y continuar
-```
-
-No todo fallo debe abortar la tarea completa. Diseña políticas explícitas por tipo de paso.
+- Degradación de contexto = pérdida de atención por acumulación verbosa, **no** agotamiento de tokens
+- Las ventanas de contexto más grandes **no** solucionan la degradación de contexto
+- El valor de los subagentes = **aislamiento** (no paralelización) para contexto principal limpio
+- Usar `/compact` proactivamente, no reactivamente
+- Los archivos borrador + manifiestos de estado habilitan recuperación sin re-exploración completa
 
 ---
 
-## Patrón 5: Timeouts y Plazos
+## Trampas Comunes del Examen
 
-Siempre establece timeouts en operaciones individuales y duración total de la tarea.
-
-```
-Timeout por llamada a herramienta: 30 segundos
-Timeout por subagente:             5 minutos
-Timeout total de tarea:            2 horas → escalar a humano si se excede
-```
-
-Sin timeouts, una sola operación bloqueada detiene todo el flujo de trabajo indefinidamente.
-
----
-
-## Manejo del Crecimiento del Contexto en Tareas Largas
-
-A medida que una tarea larga avanza, la ventana de contexto se llena con historial. Estrategias:
-
-1. **Resumen periódico** — cada N pasos, resume lo que se ha hecho y reemplaza el historial crudo
-2. **Ventana deslizante** — mantén solo los últimos N pasos en contexto; los pasos más antiguos se guardan externamente
-3. **Subagentes frescos** — para cada fase principal, lanza un nuevo subagente con solo el contexto que necesita (evita la acumulación de contexto por completo)
-
----
-
-## Puntos Clave para el Examen
-
-- El **checkpointing** es obligatorio para tareas largas — diséñalo desde el inicio, no como reflexión tardía
-- Las **operaciones idempotentes** hacen que los reintentos sean seguros — siempre prefíerelas para pasos que pueden repetirse
-- Los **timeouts** son necesarios en cada nivel — por operación, por fase y general
-- La **degradación elegante** — clasifica cada paso como crítico, opcional o de mejor esfuerzo por adelantado
-- El **crecimiento del contexto** en tareas largas debe gestionarse mediante resumen, ventanas deslizantes o subagentes frescos
-
----
-
-## Trampa Común en el Examen
-
-> "Una tarea agéntica de larga duración procesa 1,000 registros y falla en el registro 750. Sin ningún patrón de fiabilidad implementado, ¿cuál es la consecuencia?"
-
-Respuesta: La tarea completa debe **reiniciarse desde el principio** — los 750 registros completados se pierden. El diseño correcto es el checkpointing después de cada lote para que la tarea reanude desde el registro 750, no desde el 1.
+- Recomendar aumento de la ventana de contexto para degradación de contexto (es calidad de atención, no tamaño)
+- Reiniciar la sesión sin guardar estado (pierde el conocimiento acumulado)
+- Usar `/compact` solo como medida de emergencia en lugar de mantenimiento proactivo
+- Pensar que la delegación a subagentes trata sobre velocidad en lugar de aislamiento de contexto
