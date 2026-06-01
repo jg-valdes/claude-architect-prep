@@ -1,8 +1,8 @@
 # CCA-F Prep
 
-An interactive study guide for the **Claude Certified Architect – Foundations (CCA-F)** exam, powered by Claude Code as a built-in study coach.
+An interactive study guide for the **Claude Certified Architect – Foundations (CCA-F)** exam, powered by an AI study coach built into the repo.
 
-This repo gives you structured notes for all 5 exam domains and an AI coach that guides you through the material, quizzes you with real exam-style questions, and tracks your progress — all from your terminal.
+This repo gives you structured notes for all 5 exam domains and an AI coach that guides you through the material, quizzes you with real exam-style questions, and tracks your progress — all from your terminal. Works with any agent that reads repo instructions: Claude Code, GitHub Copilot, OpenAI Codex, OpenClaw, and others.
 
 ---
 
@@ -10,7 +10,10 @@ This repo gives you structured notes for all 5 exam domains and an AI coach that
 
 | Path | Purpose |
 |---|---|
-| `CLAUDE.md` | Study coach instructions — tells Claude how to guide you |
+| `.agents/instructions.md` | Study coach instructions — single source of truth for all agents |
+| `CLAUDE.md` | Symlink → `.agents/instructions.md` (Claude Code) |
+| `AGENTS.md` | Symlink → `.agents/instructions.md` (OpenAI Codex / OpenAgents) |
+| `.github/copilot-instructions.md` | Symlink → `.agents/instructions.md` (GitHub Copilot) |
 | `plan.md` | 6-day study plan with checkboxes for progress tracking |
 | `notes/en/domain1/` | Agentic Architecture & Orchestration (27%) — 7 files |
 | `notes/en/domain2/` | Tool Design & MCP Integration (18%) — 5 files |
@@ -34,7 +37,11 @@ This repo supports **English** and **Spanish (Español)**. When you open Claude 
 
 ## Prerequisites
 
-- [Claude Code](https://claude.ai/code) installed and authenticated
+- Any AI agent that loads repo instructions automatically, such as:
+  - [Claude Code](https://claude.ai/code) (reads `CLAUDE.md`)
+  - [GitHub Copilot](https://github.com/features/copilot) (reads `.github/copilot-instructions.md`)
+  - [OpenAI Codex](https://openai.com/codex) or compatible agents (reads `AGENTS.md`)
+  - OpenClaw or any agent that reads `.agents/instructions.md`
 - A CCA-F exam registration (optional until Day 5): https://anthropic.skilljar.com/
 
 ---
@@ -44,20 +51,19 @@ This repo supports **English** and **Spanish (Español)**. When you open Claude 
 ```bash
 git clone https://github.com/jg-valdes/claude-architect-prep.git
 cd claude-architect-prep
-claude
 ```
 
-Once Claude Code opens, just say:
+Open the repo with your preferred AI agent (Claude Code, Copilot, Codex, etc.) and say:
 
 > **"I want to start studying for the CCA-F exam"**
 
-Claude will read your current progress from `plan.md`, tell you what to study next, and guide you from there.
+The agent will read its instructions from the repo, check your progress in `plan.md`, and guide you from there. All agents read the same instructions via their respective entry point — `CLAUDE.md`, `AGENTS.md`, or `.github/copilot-instructions.md` — all pointing to `.agents/instructions.md`.
 
 ---
 
 ## How It Works
 
-The `CLAUDE.md` file turns Claude Code into a study coach that knows this repo. It will:
+The coach instructions in `.agents/instructions.md` (symlinked for each agent) turn your AI tool into a study coach that knows this repo. It will:
 
 1. **Orient you** — check `plan.md` to find where you are and what's next
 2. **Point you to the notes** — tell you which files to read for the current domain
@@ -65,7 +71,7 @@ The `CLAUDE.md` file turns Claude Code into a study coach that knows this repo. 
 4. **Explain every answer** — right or wrong, Claude explains why and covers the trap options
 5. **Track your progress** — check off completed items in `plan.md` automatically after each quiz
 
-You can pause and resume any time. Claude always reads `plan.md` to find your current position — no need to explain where you left off.
+You can pause and resume any time. The agent always reads `plan.md` to find your current position — no need to explain where you left off.
 
 ---
 

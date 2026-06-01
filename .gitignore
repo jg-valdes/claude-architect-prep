@@ -2,6 +2,9 @@
 .claude/settings.local.json
 memory/
 
+# Per-user study progress (generated from progress.template.md, stays local)
+progress.local.md
+
 # macOS
 .DS_Store
 .AppleDouble
